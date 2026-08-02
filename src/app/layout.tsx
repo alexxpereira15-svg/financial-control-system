@@ -1,5 +1,5 @@
 // src/app/layout.tsx
-import './globals.css' // <-- AQUÍ SE IMPORTA TAILWIND PARA TODO EL PROYECTO
+import './globals.css'
 
 export const metadata = {
   title: 'Financial Control System',
