@@ -27,10 +27,10 @@ export default function Sidebar() {
 
 const navItems = [
   { name: 'Resumen', href: '/dashboard', icon: LayoutDashboard, color: 'text-indigo-400' },
-  { name: 'Ingresos', href: '/incomes', icon: ArrowUpRight, color: 'text-emerald-400' },
-  { name: 'Gastos', href: '/expenses', icon: ArrowDownRight, color: 'text-rose-400' },
-  { name: 'Deudas', href: '/debts', icon: CreditCard, color: 'text-amber-400' },
-  { name: 'Metas', href: '/goals', icon: Target, color: 'text-cyan-400' },
+  { name: 'Ingresos', href: '/ingresos', icon: ArrowUpRight, color: 'text-emerald-400' },
+  { name: 'Gastos', href: '/gastos', icon: ArrowDownRight, color: 'text-rose-400' },
+  { name: 'Deudas', href: '/deudas', icon: CreditCard, color: 'text-amber-400' },
+  { name: 'Metas', href: '/metas', icon: Target, color: 'text-cyan-400' },
 ]
 
   return (
