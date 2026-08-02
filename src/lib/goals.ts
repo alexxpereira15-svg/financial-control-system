@@ -23,7 +23,8 @@ export async function addGoal(goal: Goal) {
       deadline: goal.deadline,
     },
   ])
-
+  .select()
+  
   if (error) throw error
   return data
 }
