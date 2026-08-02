@@ -23,13 +23,15 @@ export default function Sidebar() {
     router.push('/login')
   }
 
-  const navItems = [
-    { name: 'Resumen', href: '/dashboard', icon: LayoutDashboard, color: 'text-indigo-400' },
-    { name: 'Ingresos', href: '/incomes', icon: ArrowUpRight, color: 'text-emerald-400' },
-    { name: 'Gastos', href: '/expenses', icon: ArrowDownRight, color: 'text-rose-400' },
-    { name: 'Deudas', href: '/debts', icon: CreditCard, color: 'text-amber-400' },
-    { name: 'Metas', href: '/goals', icon: Target, color: 'text-cyan-400' },
-  ]
+  // src/components/Sidebar.tsx
+
+const navItems = [
+  { name: 'Resumen', href: '/dashboard', icon: LayoutDashboard, color: 'text-indigo-400' },
+  { name: 'Ingresos', href: '/incomes', icon: ArrowUpRight, color: 'text-emerald-400' },
+  { name: 'Gastos', href: '/expenses', icon: ArrowDownRight, color: 'text-rose-400' },
+  { name: 'Deudas', href: '/debts', icon: CreditCard, color: 'text-amber-400' },
+  { name: 'Metas', href: '/goals', icon: Target, color: 'text-cyan-400' },
+]
 
   return (
     <aside className="w-64 fixed inset-y-0 left-0 bg-slate-900/90 border-r border-slate-800/80 backdrop-blur-xl flex flex-col justify-between p-5 z-50">
