@@ -26,7 +26,8 @@ export async function addIncome(income: Income) {
       date: income.date,
     },
   ])
-
+  .select()
+  
   if (error) throw error
   return data
 }
