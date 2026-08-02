@@ -28,7 +28,8 @@ export async function addExpense(expense: Expense) {
       date: expense.date,
     },
   ])
-
+  .select()
+  
   if (error) throw error
   return data
 }
