@@ -1,121 +1,84 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import {
-  LayoutDashboard,
-  TrendingUp,
-  TrendingDown,
-  CreditCard,
-  Target,
-  FileText,
-  LogOut,
-  Menu,
-  X,
-  Wallet,
+import { 
+  LayoutDashboard, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  CreditCard, 
+  Target, 
+  LogOut, 
+  Wallet 
 } from 'lucide-react'
-
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Ingresos', href: '/ingresos', icon: TrendingUp },
-  { name: 'Gastos', href: '/gastos', icon: TrendingDown },
-  { name: 'Deudas', href: '/deudas', icon: CreditCard },
-  { name: 'Metas', href: '/metas', icon: Target },
-  { name: 'Historial y Corte', href: '/reportes', icon: FileText },
-]
+import { createClient } from '@/lib/supabase/client'
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [mobileOpen, setMobileOpen] = useState(false)
 
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const NavContent = () => (
-    <div className="flex flex-col h-full bg-gray-900 border-r border-gray-800 w-64 p-4 text-gray-200">
-      {/* Brand Header */}
-      <div className="flex items-center gap-3 px-2 py-4 mb-4 border-b border-gray-800">
-        <div className="bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 text-emerald-400">
-          <Wallet className="w-6 h-6" />
-        </div>
-        <div>
-          <h2 className="font-bold text-sm text-gray-100 tracking-wide">Financial Control</h2>
-          <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Sistema V1</p>
-        </div>
-      </div>
-
-      {/* Navigation Links */}
-      <nav className="flex-1 space-y-1">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href
-          const Icon = item.icon
-
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors ${
-                isActive
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold'
-                  : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-gray-400'}`} />
-              {item.name}
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* Logout Footer */}
-      <div className="border-t border-gray-800 pt-4 mt-auto">
-        <button
-          onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20 border border-transparent transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Cerrar Sesión
-        </button>
-      </div>
-    </div>
-  )
+  const navItems = [
+    { name: 'Resumen', href: '/dashboard', icon: LayoutDashboard, color: 'text-indigo-400' },
+    { name: 'Ingresos', href: '/incomes', icon: ArrowUpRight, color: 'text-emerald-400' },
+    { name: 'Gastos', href: '/expenses', icon: ArrowDownRight, color: 'text-rose-400' },
+    { name: 'Deudas', href: '/debts', icon: CreditCard, color: 'text-amber-400' },
+    { name: 'Metas', href: '/goals', icon: Target, color: 'text-cyan-400' },
+  ]
 
   return (
-    <>
-      {/* Botón menú flotante para móvil */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2 bg-gray-900 border border-gray-800 text-gray-200 rounded-xl shadow-lg focus:outline-none"
-        >
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
-      </div>
-
-      {/* Drawer Móvil */}
-      {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
-          <div className="relative z-50">
-            <NavContent />
+    <aside className="w-64 fixed inset-y-0 left-0 bg-slate-900/90 border-r border-slate-800/80 backdrop-blur-xl flex flex-col justify-between p-5 z-50">
+      <div className="space-y-8">
+        {/* Branding */}
+        <div className="flex items-center gap-3 px-2">
+          <div className="p-2.5 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-xl shadow-lg shadow-indigo-500/30">
+            <Wallet className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="font-bold text-white text-base tracking-wide">CashFlow</h2>
+            <p className="text-[10px] text-indigo-400 font-semibold uppercase tracking-wider">Control System</p>
           </div>
         </div>
-      )}
 
-      {/* Sidebar fijo para Desktop */}
-      <aside className="hidden lg:block fixed left-0 top-0 h-screen z-30">
-        <NavContent />
-      </aside>
-    </>
+        {/* Links de Navegación */}
+        <nav className="space-y-1.5">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${
+                  isActive
+                    ? 'bg-indigo-600/20 text-white border border-indigo-500/30 shadow-md shadow-indigo-600/10'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${item.color}`} />
+                <span>{item.name}</span>
+              </Link>
+            )
+          })}
+        </nav>
+      </div>
+
+      {/* Logout */}
+      <div className="border-t border-slate-800/80 pt-4">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3.5 py-2.5 text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all duration-200"
+        >
+          <LogOut className="w-4 h-4 text-rose-400" />
+          <span>Cerrar Sesión</span>
+        </button>
+      </div>
+    </aside>
   )
 }
