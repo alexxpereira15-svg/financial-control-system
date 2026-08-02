@@ -29,7 +29,8 @@ export async function addDebt(debt: Debt) {
       due_date: debt.due_date,
     },
   ])
-
+  .select()
+  
   if (error) throw error
   return data
 }
