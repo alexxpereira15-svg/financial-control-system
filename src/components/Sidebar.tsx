@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/usePathname' // O usePathname de 'next/navigation'
+import { usePathname } from 'next/navigation' // O usePathname de 'next/navigation'
 import {
   LayoutDashboard,
   Wallet,
