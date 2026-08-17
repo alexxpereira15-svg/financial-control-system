@@ -3,67 +3,39 @@ import { createClient } from '@/lib/supabase/client'
 export interface Debt {
   id?: string
   name: string
-  type: 'credit_card' | 'personal_loan' | 'mortgage' | 'other'
-  initial_amount: number
+  debt_type: 'credit_card' | 'loan' | 'personal'
+  credit_limit?: number | null
   current_balance: number
-  annual_interest_rate: number
-  minimum_payment: number
-  due_date: number // Día del mes (1-31)
+  cutoff_day?: number | null
+  payment_due_day?: number | null
+  created_at?: string
 }
 
-export async function addDebt(debt: Debt) {
-  const supabase = createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Usuario no autenticado')
-
-  const { data, error } = await supabase.from('debts').insert([
-    {
-      user_id: user.id,
-      name: debt.name,
-      type: debt.type,
-      initial_amount: debt.initial_amount,
-      current_balance: debt.current_balance,
-      annual_interest_rate: debt.annual_interest_rate,
-      minimum_payment: debt.minimum_payment,
-      due_date: debt.due_date,
-    },
-  ])
-  .select()
-  
-  if (error) throw error
-  return data
-}
+const supabase = createClient()
 
 export async function getDebts(): Promise<Debt[]> {
-  const supabase = createClient()
-  
-  // Ordenamos directamente en la consulta por tasa de interés anual descendente (Método Avalancha)
   const { data, error } = await supabase
     .from('debts')
     .select('*')
-    .order('annual_interest_rate', { ascending: false })
+    .order('name', { ascending: true })
 
   if (error) throw error
   return data || []
 }
 
-export async function recordDebtPayment(debtId: string, currentBalance: number, paymentAmount: number) {
-  const supabase = createClient()
-  const newBalance = Math.max(0, currentBalance - paymentAmount)
+export async function addDebt(debt: Omit<Debt, 'id' | 'created_at'>) {
+  const { data, error } = await supabase.from('debts').insert([debt]).select().single()
+  if (error) throw error
+  return data
+}
 
-  // 1. Registrar el pago en el historial
-  const { error: paymentError } = await supabase
-    .from('debt_payments')
-    .insert([{ debt_id: debtId, amount: paymentAmount }])
+export async function updateDebt(id: string, updates: Partial<Debt>) {
+  const { data, error } = await supabase.from('debts').update(updates).eq('id', id).select()
+  if (error) throw error
+  return data
+}
 
-  if (paymentError) throw paymentError
-
-  // 2. Actualizar el saldo actual de la deuda
-  const { error: updateError } = await supabase
-    .from('debts')
-    .update({ current_balance: newBalance })
-    .eq('id', debtId)
-
-  if (updateError) throw updateError
+export async function deleteDebt(id: string) {
+  const { error } = await supabase.from('debts').delete().eq('id', id)
+  if (error) throw error
 }
