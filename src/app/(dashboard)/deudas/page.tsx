@@ -2,7 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent } from 'lucide-react'
+
+// Helper para formatear siempre como $0,000.00
+const formatCurrency = (amount: number | null | undefined) => {
+  const val = Number(amount) || 0
+  return '$' + new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(val)
+}
 
 export default function DebtsPage() {
   const [debts, setDebts] = useState<any[]>([])
@@ -192,14 +201,14 @@ export default function DebtsPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
-                      <span>Monto Inicial: <strong className="text-slate-300">${initialVal.toLocaleString()}</strong></span>
+                      <span>Monto Inicial: <strong className="text-slate-300">{formatCurrency(initialVal)}</strong></span>
                       {debt.annual_interest_rate && (
                         <span className="flex items-center gap-1 text-indigo-300">
                           <Percent className="w-3 h-3 text-indigo-400" /> Interés: {debt.annual_interest_rate}%
                         </span>
                       )}
                       {debt.minimum_payment && (
-                        <span>Pago Mín: <strong className="text-slate-300">${debt.minimum_payment.toLocaleString()}</strong></span>
+                        <span>Pago Mín: <strong className="text-slate-300">{formatCurrency(debt.minimum_payment)}</strong></span>
                       )}
                       {debt.due_date && (
                         <span className="flex items-center gap-1 text-amber-300/80">
@@ -213,7 +222,7 @@ export default function DebtsPage() {
                     <div className="text-left sm:text-right">
                       <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-medium">Balance Actual</span>
                       <span className={`text-xl font-extrabold ${isSettled ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        ${currentVal.toLocaleString()}
+                        {formatCurrency(currentVal)}
                       </span>
                     </div>
 
@@ -250,6 +259,7 @@ export default function DebtsPage() {
                   <span className="text-xs font-semibold text-slate-300 block">Registrar Nuevo Abono</span>
                   <input
                     type="number"
+                    step="0.01"
                     placeholder="Monto ($)"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
@@ -292,7 +302,7 @@ export default function DebtsPage() {
                   paymentsHistory.map((pay) => (
                     <div key={pay.id} className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl text-xs space-y-1">
                       <div className="flex items-center justify-between text-slate-300">
-                        <span className="font-bold text-emerald-400">+${pay.amount?.toLocaleString()}</span>
+                        <span className="font-bold text-emerald-400">+{formatCurrency(pay.amount)}</span>
                         <span className="flex items-center gap-1 text-[10px] text-slate-500">
                           <Calendar className="w-3 h-3" /> {pay.payment_date}
                         </span>
@@ -361,7 +371,8 @@ export default function DebtsPage() {
                   <label className="text-xs text-slate-400 block mb-1">Monto Inicial (`initial_amount`)*</label>
                   <input
                     type="number"
-                    placeholder="15000"
+                    step="0.01"
+                    placeholder="15000.00"
                     value={formData.initial_amount}
                     onChange={(e) => setFormData({ ...formData, initial_amount: e.target.value })}
                     required
@@ -375,6 +386,7 @@ export default function DebtsPage() {
                   <label className="text-xs text-slate-400 block mb-1">Balance Actual (`current_balance`)</label>
                   <input
                     type="number"
+                    step="0.01"
                     placeholder="Igual al inicial si se omite"
                     value={formData.current_balance}
                     onChange={(e) => setFormData({ ...formData, current_balance: e.target.value })}
@@ -400,7 +412,8 @@ export default function DebtsPage() {
                   <label className="text-xs text-slate-400 block mb-1">Pago Mínimo (`minimum_payment`)</label>
                   <input
                     type="number"
-                    placeholder="Ej. 800"
+                    step="0.01"
+                    placeholder="Ej. 800.00"
                     value={formData.minimum_payment}
                     onChange={(e) => setFormData({ ...formData, minimum_payment: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
