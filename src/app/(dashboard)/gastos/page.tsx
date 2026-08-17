@@ -1,10 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addExpense, getExpenses, toggleExpenseStatus, Expense } from '@/lib/expenses'
+import {
+  addExpense,
+  getExpenses,
+  toggleExpenseStatus,
+  getPaymentDebts,
+  Expense,
+  ExpenseFrequency,
+  PaymentSource,
+} from '@/lib/expenses'
+import { CreditCard, Calendar, RefreshCw, CheckCircle, Clock } from 'lucide-react'
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [paymentSources, setPaymentSources] = useState<PaymentSource[]>([])
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
 
@@ -12,21 +22,31 @@ export default function ExpensesPage() {
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
   const [status, setStatus] = useState<'pending' | 'paid'>('paid')
-  const [frequency, setFrequency] = useState<'one_time' | 'monthly' | 'yearly'>('one_time')
+  const [frequency, setFrequency] = useState<ExpenseFrequency>('one_time')
+  const [paymentMethod, setPaymentMethod] = useState('efectivo')
+  const [selectedDebtId, setSelectedDebtId] = useState<string>('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
 
   useEffect(() => {
-    loadExpenses()
+    loadData()
   }, [])
 
-  const loadExpenses = async () => {
+  const loadData = async () => {
     try {
-      const data = await getExpenses()
-      setExpenses(data)
+      const [expensesData, debtsData] = await Promise.all([getExpenses(), getPaymentDebts()])
+      setExpenses(expensesData)
+      setPaymentSources(debtsData)
     } catch (err) {
-      console.error('Error al cargar gastos:', err)
+      console.error('Error al cargar información:', err)
     } finally {
       setFetching(false)
+    }
+  }
+
+  const handlePaymentMethodChange = (method: string) => {
+    setPaymentMethod(method)
+    if (method !== 'tarjeta_credito') {
+      setSelectedDebtId('')
     }
   }
 
@@ -41,13 +61,17 @@ export default function ExpensesPage() {
         amount: parseFloat(amount),
         status,
         frequency,
+        payment_method: paymentMethod,
+        debt_id: paymentMethod === 'tarjeta_credito' && selectedDebtId ? selectedDebtId : null,
         date,
       })
 
       setTitle('')
       setAmount('')
+      setPaymentMethod('efectivo')
+      setSelectedDebtId('')
       setDate(new Date().toISOString().split('T')[0])
-      await loadExpenses()
+      await loadData()
     } catch (err) {
       console.error('Error al guardar gasto:', err)
     } finally {
@@ -55,10 +79,11 @@ export default function ExpensesPage() {
     }
   }
 
-  const handleToggleStatus = async (id: string, currentStatus: 'pending' | 'paid') => {
+  const handleToggleStatus = async (exp: Expense) => {
+    if (!exp.id) return
     try {
-      await toggleExpenseStatus(id, currentStatus)
-      await loadExpenses()
+      await toggleExpenseStatus(exp.id, exp.status, exp.amount, exp.debt_id)
+      await loadData()
     } catch (err) {
       console.error('Error al cambiar estado:', err)
     }
@@ -78,7 +103,7 @@ export default function ExpensesPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Control de Gastos</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Registra tus consumos, servicios, salidas y controla tus compromisos pendientes.
+          Registra tus consumos, automatiza cobros recurrentes y vincula gastos a tus tarjetas Nu o Santander.
         </p>
       </div>
 
@@ -108,8 +133,8 @@ export default function ExpensesPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Formulario */}
-        <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg h-fit">
-          <h2 className="text-lg font-semibold mb-4">Nuevo Gasto</h2>
+        <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg h-fit space-y-4">
+          <h2 className="text-lg font-semibold">Nuevo Gasto</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -118,11 +143,11 @@ export default function ExpensesPage() {
               </label>
               <input
                 type="text"
-                placeholder="Ej. Renta, Supermercado, Netflix"
+                placeholder="Ej. Renta, Luz, CFE, Netflix, Super"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500"
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
               />
             </div>
 
@@ -137,24 +162,23 @@ export default function ExpensesPage() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500"
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">
                   Recurrencia
                 </label>
                 <select
                   value={frequency}
-                  onChange={(e) =>
-                    setFrequency(e.target.value as 'one_time' | 'monthly' | 'yearly')
-                  }
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500"
+                  onChange={(e) => setFrequency(e.target.value as ExpenseFrequency)}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
                 >
                   <option value="one_time">Única vez</option>
                   <option value="monthly">Mensual</option>
+                  <option value="bimonthly">Bimestral</option>
                   <option value="yearly">Anual</option>
                 </select>
               </div>
@@ -166,12 +190,54 @@ export default function ExpensesPage() {
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as 'pending' | 'paid')}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500"
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
                 >
                   <option value="paid">Pagado</option>
                   <option value="pending">Pendiente</option>
                 </select>
               </div>
+            </div>
+
+            {/* Método de Pago y Vincular a Tarjeta / Deuda */}
+            <div className="space-y-3 pt-1 border-t border-gray-800">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">
+                  Método de Pago
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => handlePaymentMethodChange(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
+                >
+                  <option value="efectivo">Efectivo / Débito</option>
+                  <option value="tarjeta_credito">Tarjeta de Crédito (Vincular Deuda)</option>
+                  <option value="transferencia">Transferencia (SPEI)</option>
+                </select>
+              </div>
+
+              {paymentMethod === 'tarjeta_credito' && (
+                <div className="bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2">
+                  <label className="block text-xs font-medium text-indigo-400 flex items-center gap-1">
+                    <CreditCard className="w-3.5 h-3.5" /> Seleccionar Tarjeta / Cuenta:
+                  </label>
+                  <select
+                    value={selectedDebtId}
+                    onChange={(e) => setSelectedDebtId(e.target.value)}
+                    required={paymentMethod === 'tarjeta_credito'}
+                    className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 text-white"
+                  >
+                    <option value="">-- Elige una tarjeta registrada --</option>
+                    {paymentSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-500">
+                    Al marcar como pagado, el saldo consumido se cargará automáticamente a esta tarjeta.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -181,7 +247,7 @@ export default function ExpensesPage() {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500"
+                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
               />
             </div>
 
@@ -211,43 +277,69 @@ export default function ExpensesPage() {
               </div>
             ) : (
               <div className="divide-y divide-gray-800">
-                {expenses.map((exp) => (
-                  <div
-                    key={exp.id}
-                    className="p-4 flex items-center justify-between hover:bg-gray-800/40 transition-colors"
-                  >
-                    <div>
-                      <p className="font-medium text-sm text-gray-100">{exp.title}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded capitalize">
-                          {exp.frequency === 'one_time'
-                            ? 'Única vez'
-                            : exp.frequency === 'monthly'
-                            ? 'Mensual'
-                            : 'Anual'}
-                        </span>
-                        <span className="text-[10px] text-gray-500">{exp.date}</span>
+                {expenses.map((exp) => {
+                  const linkedDebt = paymentSources.find((p) => p.id === exp.debt_id)
+
+                  return (
+                    <div
+                      key={exp.id}
+                      className="p-4 flex items-center justify-between hover:bg-gray-800/40 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <p className="font-medium text-sm text-gray-100">{exp.title}</p>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded capitalize flex items-center gap-1">
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            {exp.frequency === 'one_time'
+                              ? 'Única vez'
+                              : exp.frequency === 'monthly'
+                              ? 'Mensual'
+                              : exp.frequency === 'bimonthly'
+                              ? 'Bimestral'
+                              : 'Anual'}
+                          </span>
+
+                          <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                            <Calendar className="w-2.5 h-2.5" /> {exp.date}
+                          </span>
+
+                          {linkedDebt && (
+                            <span className="text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800/50 px-2 py-0.5 rounded flex items-center gap-1">
+                              <CreditCard className="w-2.5 h-2.5 text-indigo-400" />
+                              {linkedDebt.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => handleToggleStatus(exp)}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors flex items-center gap-1 ${
+                            exp.status === 'paid'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                          }`}
+                        >
+                          {exp.status === 'paid' ? (
+                            <>
+                              <CheckCircle className="w-3 h-3" /> Pagado
+                            </>
+                          ) : (
+                            <>
+                              <Clock className="w-3 h-3" /> Pendiente
+                            </>
+                          )}
+                        </button>
+
+                        <div className="font-bold text-rose-400 text-base text-right">
+                          -${Number(exp.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => handleToggleStatus(exp.id!, exp.status)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                          exp.status === 'paid'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                        }`}
-                      >
-                        {exp.status === 'paid' ? 'Pagado' : 'Pendiente'}
-                      </button>
-
-                      <div className="font-bold text-rose-400 text-base text-right">
-                        -${Number(exp.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
