@@ -1,9 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getExpenses, addExpense, deleteExpense, Expense } from '@/lib/expenses'
+import { getExpenses, addExpense, deleteExpense, ExpenseFrequency } from '@/lib/expenses'
 import { getAccounts, Account } from '@/lib/accounts'
-import { Plus, Trash2, Wallet, DollarSign, Tag, Calendar } from 'lucide-react'
+import { Plus, Trash2, Wallet, DollarSign, Tag, RefreshCw } from 'lucide-react'
+
+const FREQUENCY_LABELS: Record<ExpenseFrequency, string> = {
+  unique: 'Única vez',
+  weekly: 'Semanal',
+  biweekly: 'Quincenal',
+  monthly: 'Mensual',
+  bimonthly: 'Bimestral',
+  quarterly: 'Trimestral',
+  annual: 'Anual',
+}
 
 export default function GastosPage() {
   const [expenses, setExpenses] = useState<any[]>([])
@@ -16,6 +26,7 @@ export default function GastosPage() {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('Alimentos / Súper')
   const [accountId, setAccountId] = useState('')
+  const [frequency, setFrequency] = useState<ExpenseFrequency>('unique')
 
   useEffect(() => {
     loadData()
@@ -51,11 +62,13 @@ export default function GastosPage() {
         description,
         category,
         account_id: accountId,
+        frequency,
         date: new Date().toISOString(),
       })
 
       setAmount('')
       setDescription('')
+      setFrequency('unique')
       await loadData()
     } catch (err) {
       console.error('Error al agregar gasto:', err)
@@ -81,11 +94,10 @@ export default function GastosPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Registro de Gastos</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Cada gasto registrado afectará automáticamente el saldo disponible de tus cuentas o el saldo acumulado en tus tarjetas.
+          Administra tus salidas de dinero e identifica la frecuencia con la que se realizan.
         </p>
       </div>
 
-      {/* Tarjeta de Resumen */}
       <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center gap-4 max-w-sm">
         <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
           <DollarSign className="w-6 h-6" />
@@ -123,7 +135,7 @@ export default function GastosPage() {
               <label className="block text-xs font-medium text-slate-400 mb-1">Concepto / Descripción</label>
               <input
                 type="text"
-                placeholder="Ej. Súper, Gasolina, Comida"
+                placeholder="Ej. Netflix, Súper, Gasolina"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
@@ -131,20 +143,39 @@ export default function GastosPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Categoría</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
-              >
-                <option value="Alimentos / Súper">Alimentos / Súper</option>
-                <option value="Servicios / Hogar">Servicios / Hogar</option>
-                <option value="Transporte / Gasolina">Transporte / Gasolina</option>
-                <option value="Entretenimiento">Entretenimiento</option>
-                <option value="Salud">Salud</option>
-                <option value="Otros">Otros</option>
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Categoría</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                >
+                  <option value="Alimentos / Súper">Alimentos / Súper</option>
+                  <option value="Servicios / Hogar">Servicios / Hogar</option>
+                  <option value="Transporte / Gasolina">Transporte / Gasolina</option>
+                  <option value="Entretenimiento">Entretenimiento</option>
+                  <option value="Salud">Salud</option>
+                  <option value="Otros">Otros</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Periodicidad</label>
+                <select
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value as ExpenseFrequency)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white focus:outline-none focus:border-rose-500"
+                >
+                  <option value="unique">Única vez</option>
+                  <option value="weekly">Semanal</option>
+                  <option value="biweekly">Quincenal</option>
+                  <option value="monthly">Mensual</option>
+                  <option value="bimonthly">Bimestral</option>
+                  <option value="quarterly">Trimestral</option>
+                  <option value="annual">Anual</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -187,37 +218,54 @@ export default function GastosPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {expenses.map((expense) => (
-                <div
-                  key={expense.id}
-                  className="bg-slate-900 border border-slate-800/80 p-4 rounded-xl flex justify-between items-center hover:border-slate-700 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <p className="font-medium text-sm text-slate-100">{expense.description}</p>
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <Tag className="w-3 h-3 text-rose-400" /> {expense.category}
+              {expenses.map((expense) => {
+                const freqKey = (expense.frequency || 'unique') as ExpenseFrequency
+                const isRecurring = freqKey !== 'unique'
+
+                return (
+                  <div
+                    key={expense.id}
+                    className="bg-slate-900 border border-slate-800/80 p-4 rounded-xl flex justify-between items-center hover:border-slate-700 transition-colors"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm text-slate-100">{expense.description}</p>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
+                            isRecurring
+                              ? 'bg-purple-950/80 text-purple-300 border-purple-800'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {FREQUENCY_LABELS[freqKey] || 'Única vez'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 text-xs text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Tag className="w-3 h-3 text-rose-400" /> {expense.category}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Wallet className="w-3 h-3 text-indigo-400" /> {expense.accounts?.name || 'Cuenta'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-rose-400 text-sm">
+                        -${Number(expense.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Wallet className="w-3 h-3 text-indigo-400" /> {expense.accounts?.name || 'Cuenta'}
-                      </span>
+                      <button
+                        onClick={() => handleDelete(expense.id)}
+                        className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-4">
-                    <span className="font-bold text-rose-400 text-sm">
-                      -${Number(expense.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                    </span>
-                    <button
-                      onClick={() => handleDelete(expense.id)}
-                      className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
