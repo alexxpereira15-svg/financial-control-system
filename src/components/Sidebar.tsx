@@ -16,7 +16,7 @@ const navLinks = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Ingresos', href: '/ingresos', icon: TrendingUp },
   { name: 'Gastos', href: '/gastos', icon: TrendingDown },
-  { name: 'Cuentas', href: '/accounts', icon: Wallet },
+  { name: 'Cuentas', href: '/cuentas', icon: Wallet },
   { name: 'Deudas', href: '/deudas', icon: CreditCard },
   { name: 'Metas', href: '/metas', icon: Target },
   { name: 'Reportes', href: '/reportes', icon: BarChart3 },
