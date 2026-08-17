@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign } from 'lucide-react'
+import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent, AlertTriangle } from 'lucide-react'
 
 export default function DebtsPage() {
   const [debts, setDebts] = useState<any[]>([])
@@ -15,8 +15,15 @@ export default function DebtsPage() {
 
   // Estado para el modal de nueva deuda
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
-  const [newTotalAmount, setNewTotalAmount] = useState('')
+  const [formData, setFormData] = useState({
+    name: '',
+    debt_type: 'Tarjeta de Crédito',
+    initial_amount: '',
+    current_balance: '',
+    annual_interest_rate: '',
+    minimum_payment: '',
+    due_date: '',
+  })
 
   const supabase = createClient()
 
@@ -43,23 +50,36 @@ export default function DebtsPage() {
 
   async function handleCreateDebt(e: React.FormEvent) {
     e.preventDefault()
-    if (!newTitle || !newTotalAmount) return
 
-    const total = Number(newTotalAmount)
+    const initialAmountNum = Number(formData.initial_amount) || 0
+    const currentBalanceNum = formData.current_balance !== '' ? Number(formData.current_balance) : initialAmountNum
 
-    const { error } = await supabase.from('debts').insert([
-      {
-        title: newTitle,
-        total_amount: total,
-        remaining_amount: total,
-      },
-    ])
+    const newDebt = {
+      name: formData.name,
+      debt_type: formData.debt_type,
+      initial_amount: initialAmountNum,
+      current_balance: currentBalanceNum,
+      annual_interest_rate: formData.annual_interest_rate ? Number(formData.annual_interest_rate) : null,
+      minimum_payment: formData.minimum_payment ? Number(formData.minimum_payment) : null,
+      due_date: formData.due_date || null,
+    }
+
+    const { error } = await supabase.from('debts').insert([newDebt])
 
     if (!error) {
-      setNewTitle('')
-      setNewTotalAmount('')
+      setFormData({
+        name: '',
+        debt_type: 'Tarjeta de Crédito',
+        initial_amount: '',
+        current_balance: '',
+        annual_interest_rate: '',
+        minimum_payment: '',
+        due_date: '',
+      })
       setIsModalOpen(false)
       fetchDebts()
+    } else {
+      console.error('Error al insertar deuda:', error)
     }
   }
 
@@ -68,8 +88,8 @@ export default function DebtsPage() {
     if (!selectedDebt || !amount) return
 
     const payAmount = Number(amount)
-    const currentRemaining = selectedDebt.remaining_amount ?? selectedDebt.total_amount ?? 0
-    const newRemaining = Math.max(0, currentRemaining - payAmount)
+    const currentBalance = selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0
+    const newBalance = Math.max(0, currentBalance - payAmount)
 
     // 1. Guardar abono en el historial
     await supabase.from('debt_payments').insert([
@@ -81,18 +101,20 @@ export default function DebtsPage() {
       },
     ])
 
-    // 2. Actualizar monto restante en la deuda principal
-    await supabase.from('debts').update({ remaining_amount: newRemaining }).eq('id', selectedDebt.id)
+    // 2. Actualizar balance actual en la deuda principal
+    await supabase.from('debts').update({ current_balance: newBalance }).eq('id', selectedDebt.id)
 
-    // 3. Animación / aviso de liquidación
-    if (newRemaining === 0) {
+    // 3. Celebración si se liquida
+    if (newBalance === 0) {
       setShowCelebration(true)
       setTimeout(() => setShowCelebration(false), 5000)
     }
 
     setAmount('')
     setComment('')
-    openHistory({ ...selectedDebt, remaining_amount: newRemaining })
+    const updatedSelected = { ...selectedDebt, current_balance: newBalance }
+    setSelectedDebt(updatedSelected)
+    openHistory(updatedSelected)
     fetchDebts()
   }
 
@@ -116,7 +138,7 @@ export default function DebtsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Gestión de Deudas</h1>
-          <p className="text-slate-400 text-sm mt-1">Registra pagos, consulta movimientos y liquida tus saldos pendientes.</p>
+          <p className="text-slate-400 text-sm mt-1">Registra pagos, consulta movimientos y monitorea tus saldos y tasas.</p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
@@ -135,9 +157,9 @@ export default function DebtsPage() {
             </div>
           ) : (
             debts.map((debt) => {
-              const totalVal = debt.total_amount ?? 0
-              const remainingVal = debt.remaining_amount ?? totalVal
-              const isSettled = remainingVal <= 0
+              const initialVal = debt.initial_amount ?? 0
+              const currentVal = debt.current_balance ?? initialVal
+              const isSettled = currentVal <= 0
               const isSelected = selectedDebt?.id === debt.id
 
               return (
@@ -150,27 +172,48 @@ export default function DebtsPage() {
                       : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-lg">{debt.title || debt.name || 'Deuda'}</span>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-white text-lg">{debt.name || 'Deuda sin nombre'}</span>
+                      {debt.debt_type && (
+                        <span className="text-[10px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                          {debt.debt_type}
+                        </span>
+                      )}
                       {isSettled ? (
                         <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
                           <CheckCircle2 className="w-3 h-3" /> Liquidada
                         </span>
                       ) : (
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
-                          En Proceso
+                          Activa
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400">Total Inicial: ${totalVal.toLocaleString()}</p>
+
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
+                      <span>Monto Inicial: <strong className="text-slate-300">${initialVal.toLocaleString()}</strong></span>
+                      {debt.annual_interest_rate && (
+                        <span className="flex items-center gap-1 text-indigo-300">
+                          <Percent className="w-3 h-3 text-indigo-400" /> Interés: {debt.annual_interest_rate}%
+                        </span>
+                      )}
+                      {debt.minimum_payment && (
+                        <span>Pago Mín: <strong className="text-slate-300">${debt.minimum_payment.toLocaleString()}</strong></span>
+                      )}
+                      {debt.due_date && (
+                        <span className="flex items-center gap-1 text-amber-300/80">
+                          <Calendar className="w-3 h-3 text-amber-400" /> Vence: {debt.due_date}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-6">
-                    <div className="text-right">
-                      <span className="text-xs text-slate-400 uppercase tracking-wider block">Saldo Restante</span>
+                  <div className="flex items-center justify-between sm:justify-end gap-6 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-800/80">
+                    <div className="text-left sm:text-right">
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-medium">Balance Actual</span>
                       <span className={`text-xl font-extrabold ${isSettled ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        ${remainingVal.toLocaleString()}
+                        ${currentVal.toLocaleString()}
                       </span>
                     </div>
 
@@ -197,12 +240,12 @@ export default function DebtsPage() {
             <>
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <History className="w-5 h-5 text-indigo-400" /> Historial de {selectedDebt.title || selectedDebt.name}
+                  <History className="w-5 h-5 text-indigo-400" /> Historial de {selectedDebt.name}
                 </h2>
-                <p className="text-xs text-slate-400">Registra abonos o revisa los pagos guardados.</p>
+                <p className="text-xs text-slate-400">Registra abonos o revisa los movimientos guardados.</p>
               </div>
 
-              {(selectedDebt.remaining_amount ?? selectedDebt.total_amount ?? 0) > 0 ? (
+              {(selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0) > 0 ? (
                 <form onSubmit={handleRegisterPayment} className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
                   <span className="text-xs font-semibold text-slate-300 block">Registrar Nuevo Abono</span>
                   <input
@@ -271,8 +314,8 @@ export default function DebtsPage() {
 
       {/* Modal para Crear Nueva Deuda */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-5 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 space-y-5 shadow-2xl relative my-8">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-indigo-400" /> Registrar Nueva Deuda
@@ -287,30 +330,95 @@ export default function DebtsPage() {
 
             <form onSubmit={handleCreateDebt} className="space-y-4">
               <div>
-                <label className="text-xs text-slate-400 block mb-1">Nombre / Concepto</label>
+                <label className="text-xs text-slate-400 block mb-1">Nombre de la Deuda (`name`)*</label>
                 <input
                   type="text"
-                  placeholder="Ej. Tarjeta de Crédito, Préstamo Banamex"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Ej. Tarjeta Banamex, Préstamo Personal"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Monto Total Inicial ($)</label>
-                <input
-                  type="number"
-                  placeholder="Ej. 15000"
-                  value={newTotalAmount}
-                  onChange={(e) => setNewTotalAmount(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Tipo (`debt_type`)</label>
+                  <select
+                    value={formData.debt_type}
+                    onChange={(e) => setFormData({ ...formData, debt_type: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+                    <option value="Préstamo Personal">Préstamo Personal</option>
+                    <option value="Hipoteca">Hipoteca</option>
+                    <option value="Automotriz">Automotriz</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Monto Inicial (`initial_amount`)*</label>
+                  <input
+                    type="number"
+                    placeholder="15000"
+                    value={formData.initial_amount}
+                    onChange={(e) => setFormData({ ...formData, initial_amount: e.target.value })}
+                    required
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Balance Actual (`current_balance`)</label>
+                  <input
+                    type="number"
+                    placeholder="Igual al inicial si se omite"
+                    value={formData.current_balance}
+                    onChange={(e) => setFormData({ ...formData, current_balance: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Interés Anual % (`annual_interest_rate`)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ej. 24.5"
+                    value={formData.annual_interest_rate}
+                    onChange={(e) => setFormData({ ...formData, annual_interest_rate: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Pago Mínimo (`minimum_payment`)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej. 800"
+                    value={formData.minimum_payment}
+                    onChange={(e) => setFormData({ ...formData, minimum_payment: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Fecha Límite / Vencimiento (`due_date`)</label>
+                  <input
+                    type="date"
+                    value={formData.due_date}
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
