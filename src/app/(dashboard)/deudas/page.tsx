@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent } from 'lucide-react'
+import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent, Flame } from 'lucide-react'
 
 // Helper para formatear siempre como $0,000.00
 const formatCurrency = (amount: number | null | undefined) => {
@@ -46,6 +46,11 @@ export default function DebtsPage() {
       setDebts(data)
     }
   }
+
+  // Identificar la deuda de mayor prioridad (mayor tasa de interés entre las activas)
+  const highestInterestDebtId = debts
+    .filter((d) => (d.current_balance ?? d.initial_amount ?? 0) > 0 && d.annual_interest_rate)
+    .sort((a, b) => (Number(b.annual_interest_rate) || 0) - (Number(a.annual_interest_rate) || 0))[0]?.id
 
   async function openHistory(debt: any) {
     setSelectedDebt(debt)
@@ -170,18 +175,28 @@ export default function DebtsPage() {
               const currentVal = debt.current_balance ?? initialVal
               const isSettled = currentVal <= 0
               const isSelected = selectedDebt?.id === debt.id
+              const isHighPriority = debt.id === highestInterestDebtId
 
               return (
                 <div
                   key={debt.id}
                   onClick={() => openHistory(debt)}
-                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden ${
                     isSelected
                       ? 'bg-indigo-900/20 border-indigo-500 shadow-lg shadow-indigo-500/10'
+                      : isHighPriority
+                      ? 'bg-rose-950/20 border-rose-500/50 hover:border-rose-500/80'
                       : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
                   }`}
                 >
                   <div className="space-y-1.5">
+                    {/* Tag de Prioridad Alta */}
+                    {isHighPriority && !isSettled && (
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 mb-1">
+                        <Flame className="w-3.5 h-3.5 text-rose-400 fill-rose-400" /> Prioridad Alta (Mayor Interés)
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-white text-lg">{debt.name || 'Deuda sin nombre'}</span>
                       {debt.debt_type && (
