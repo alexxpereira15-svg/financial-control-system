@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import confetti from 'canvas-confetti'
 import { CreditCard, Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle } from 'lucide-react'
 
 export default function DebtsPage() {
@@ -12,6 +11,7 @@ export default function DebtsPage() {
   const [amount, setAmount] = useState('')
   const [comment, setComment] = useState('')
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [showCelebration, setShowCelebration] = useState(false)
 
   const supabase = createClient()
 
@@ -54,9 +54,10 @@ export default function DebtsPage() {
     // 2. Actualizar monto restante en la deuda principal
     await supabase.from('debts').update({ remaining_amount: newRemaining }).eq('id', selectedDebt.id)
 
-    // 3. Celebración de felicitación si la deuda llegó a $0 🎉
+    // 3. Mostrar aviso de felicitación si la deuda llegó a $0
     if (newRemaining === 0) {
-      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } })
+      setShowCelebration(true)
+      setTimeout(() => setShowCelebration(false), 5000)
     }
 
     setAmount('')
@@ -73,7 +74,14 @@ export default function DebtsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto relative">
+      {/* Mensaje de Celebración Nativo */}
+      {showCelebration && (
+        <div className="bg-emerald-500 text-slate-950 font-bold p-4 rounded-2xl shadow-2xl text-center animate-bounce">
+          🎉 ¡Felicidades! Has liquidado por completo esta deuda.
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-extrabold text-white tracking-tight">Gestión de Deudas</h1>
         <p className="text-slate-400 text-sm mt-1">Registra pagos, consulta movimientos y liquida tus saldos pendientes.</p>
