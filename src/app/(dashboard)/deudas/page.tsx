@@ -2,7 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent, Flame, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
+import {
+  Plus,
+  Trash2,
+  History,
+  CheckCircle2,
+  Calendar,
+  AlertCircle,
+  X,
+  DollarSign,
+  Percent,
+  Flame,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Pencil,
+  Check,
+} from 'lucide-react'
 
 // Helper para formatear siempre como $0,000.00
 const formatCurrency = (amount: number | null | undefined) => {
@@ -17,13 +32,20 @@ export default function DebtsPage() {
   const [debts, setDebts] = useState<any[]>([])
   const [selectedDebt, setSelectedDebt] = useState<any | null>(null)
   const [paymentsHistory, setPaymentsHistory] = useState<any[]>([])
-  
+
   // Estado para movimientos (Abono o Cargo)
   const [movementType, setMovementType] = useState<'payment' | 'charge'>('payment')
   const [amount, setAmount] = useState('')
   const [comment, setComment] = useState('')
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [showCelebration, setShowCelebration] = useState(false)
+
+  // Estado para edición inline de un movimiento
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editComment, setEditComment] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editMovementType, setEditMovementType] = useState<'payment' | 'charge'>('payment')
 
   // Estado para el modal de nueva deuda
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -57,6 +79,7 @@ export default function DebtsPage() {
 
   async function openHistory(debt: any) {
     setSelectedDebt(debt)
+    setEditingPaymentId(null)
     const { data } = await supabase
       .from('debt_payments')
       .select('*')
@@ -108,16 +131,13 @@ export default function DebtsPage() {
     if (isNaN(inputAmount) || inputAmount <= 0) return
 
     const isPayment = movementType === 'payment'
-    // Si es abono, en la tabla guardamos monto positivo. Si es cargo/gasto, guardamos monto negativo para diferenciar en historial
     const storedAmount = isPayment ? inputAmount : -inputAmount
 
     const currentBalance = selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0
-    // Si es abono resta al balance; si es cargo incrementa el balance
     const newBalance = isPayment ? Math.max(0, currentBalance - inputAmount) : currentBalance + inputAmount
 
     const defaultComment = isPayment ? 'Abono a deuda' : 'Cargo / Gasto recurrente'
 
-    // 1. Guardar movimiento en debt_payments
     const { error: paymentError } = await supabase.from('debt_payments').insert([
       {
         debt_id: selectedDebt.id,
@@ -133,7 +153,6 @@ export default function DebtsPage() {
       return
     }
 
-    // 2. Actualizar el saldo actual de la deuda
     const { error: updateError } = await supabase
       .from('debts')
       .update({ current_balance: newBalance })
@@ -143,7 +162,6 @@ export default function DebtsPage() {
       console.error('Error al actualizar el saldo de la deuda:', updateError)
     }
 
-    // 3. Celebración si un abono liquida la deuda por completo
     if (isPayment && newBalance === 0) {
       setShowCelebration(true)
       setTimeout(() => setShowCelebration(false), 5000)
@@ -151,6 +169,87 @@ export default function DebtsPage() {
 
     setAmount('')
     setComment('')
+    const updatedSelected = { ...selectedDebt, current_balance: newBalance }
+    setSelectedDebt(updatedSelected)
+    openHistory(updatedSelected)
+    fetchDebts()
+  }
+
+  // --- ELIMINAR UN MOVIMIENTO DEL HISTORIAL ---
+  async function handleDeletePayment(payment: any) {
+    if (!confirm('¿Deseas eliminar este movimiento? El saldo de la deuda se reajustará automáticamente.')) return
+
+    const oldAmount = Number(payment.amount) || 0
+    const currentBalance = selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0
+
+    // Si borramos un abono (positivo), sumamos al saldo actual.
+    // Si borramos un cargo (negativo), restamos al saldo actual.
+    const newBalance = Math.max(0, currentBalance + oldAmount)
+
+    // 1. Eliminar movimiento
+    const { error: deleteError } = await supabase.from('debt_payments').delete().eq('id', payment.id)
+
+    if (deleteError) {
+      alert(`Error al eliminar: ${deleteError.message}`)
+      return
+    }
+
+    // 2. Actualizar saldo
+    await supabase.from('debts').update({ current_balance: newBalance }).eq('id', selectedDebt.id)
+
+    const updatedSelected = { ...selectedDebt, current_balance: newBalance }
+    setSelectedDebt(updatedSelected)
+    openHistory(updatedSelected)
+    fetchDebts()
+  }
+
+  // --- PREPARAR MODO EDICIÓN ---
+  function startEditingPayment(pay: any) {
+    setEditingPaymentId(pay.id)
+    const rawAmount = Number(pay.amount) || 0
+    setEditMovementType(rawAmount >= 0 ? 'payment' : 'charge')
+    setEditAmount(String(Math.abs(rawAmount)))
+    setEditComment(pay.comment || '')
+    setEditDate(pay.payment_date || new Date().toISOString().split('T')[0])
+  }
+
+  // --- GUARDAR EDICIÓN DE MOVIMIENTO ---
+  async function handleSaveEditedPayment(payment: any) {
+    const inputVal = Number(editAmount)
+    if (isNaN(inputVal) || inputVal <= 0) return
+
+    const isPayment = editMovementType === 'payment'
+    const newStoredAmount = isPayment ? inputVal : -inputVal
+    const oldStoredAmount = Number(payment.amount) || 0
+
+    // Ajustar la diferencia en el balance
+    // Diferencia = nuevo_efecto - viejo_efecto
+    // Ejemplo:
+    // Tenías abono +100 y lo cambias a +150 -> la deuda baja 50 más.
+    // Tenías abono +100 y lo cambias a cargo -100 -> la deuda sube 200.
+    const currentBalance = selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0
+    const balanceDifference = oldStoredAmount - newStoredAmount
+    const newBalance = Math.max(0, currentBalance + balanceDifference)
+
+    // 1. Actualizar movimiento en debt_payments
+    const { error: updatePayError } = await supabase
+      .from('debt_payments')
+      .update({
+        amount: newStoredAmount,
+        comment: editComment,
+        payment_date: editDate,
+      })
+      .eq('id', payment.id)
+
+    if (updatePayError) {
+      alert(`Error al actualizar movimiento: ${updatePayError.message}`)
+      return
+    }
+
+    // 2. Actualizar saldo de la deuda
+    await supabase.from('debts').update({ current_balance: newBalance }).eq('id', selectedDebt.id)
+
+    setEditingPaymentId(null)
     const updatedSelected = { ...selectedDebt, current_balance: newBalance }
     setSelectedDebt(updatedSelected)
     openHistory(updatedSelected)
@@ -215,7 +314,6 @@ export default function DebtsPage() {
                   }`}
                 >
                   <div className="space-y-1.5">
-                    {/* Tag de Prioridad Alta */}
                     {isHighPriority && !isSettled && (
                       <div className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 mb-1">
                         <Flame className="w-3.5 h-3.5 text-rose-400 fill-rose-400" /> Prioridad Alta (Mayor Interés)
@@ -283,7 +381,7 @@ export default function DebtsPage() {
           )}
         </div>
 
-        {/* Historial y Registro de Movimientos (Abono / Cargo) */}
+        {/* Historial y Registro de Movimientos */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
           {selectedDebt ? (
             <>
@@ -291,12 +389,11 @@ export default function DebtsPage() {
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <History className="w-5 h-5 text-indigo-400" /> Historial de {selectedDebt.name}
                 </h2>
-                <p className="text-xs text-slate-400">Registra abonos o compras/cargos recurrentes.</p>
+                <p className="text-xs text-slate-400">Registra, edita o elimina abonos y cargos.</p>
               </div>
 
-              {/* Formulario de Registro de Movimiento */}
+              {/* Formulario de Registro Nuevo */}
               <form onSubmit={handleRegisterMovement} className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-                {/* Selector Tipo de Movimiento */}
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
                   <button
                     type="button"
@@ -325,7 +422,7 @@ export default function DebtsPage() {
                 <input
                   type="number"
                   step="0.01"
-                  placeholder={movementType === 'payment' ? 'Monto del Abono ($)' : 'Monto del Cargo / Gasto ($)'}
+                  placeholder={movementType === 'payment' ? 'Monto del Abono ($)' : 'Monto del Cargo ($)'}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   required
@@ -341,7 +438,7 @@ export default function DebtsPage() {
                   />
                   <input
                     type="text"
-                    placeholder={movementType === 'payment' ? 'Ej. Abono quincenal' : 'Ej. Suscripción, Cargorecurrente'}
+                    placeholder="Concepto / Comentario"
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
@@ -360,38 +457,126 @@ export default function DebtsPage() {
                 </button>
               </form>
 
-              {/* Lista de Movimientos */}
-              <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+              {/* Lista de Movimientos con Edición y Eliminación */}
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                 {paymentsHistory.length === 0 ? (
                   <p className="text-xs text-slate-500 text-center py-4">No hay movimientos registrados.</p>
                 ) : (
                   paymentsHistory.map((pay) => {
                     const payNum = Number(pay.amount) || 0
                     const isPayment = payNum >= 0
+                    const isEditing = editingPaymentId === pay.id
 
                     return (
-                      <div key={pay.id} className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl text-xs space-y-1">
-                        <div className="flex items-center justify-between text-slate-300">
-                          <span
-                            className={`font-bold flex items-center gap-1 ${
-                              isPayment ? 'text-emerald-400' : 'text-rose-400'
-                            }`}
-                          >
-                            {isPayment ? (
-                              <>
-                                <ArrowDownLeft className="w-3.5 h-3.5" /> Abono: {formatCurrency(payNum)}
-                              </>
-                            ) : (
-                              <>
-                                <ArrowUpRight className="w-3.5 h-3.5" /> Cargo: {formatCurrency(Math.abs(payNum))}
-                              </>
-                            )}
-                          </span>
-                          <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                            <Calendar className="w-3 h-3" /> {pay.payment_date}
-                          </span>
-                        </div>
-                        {pay.comment && <p className="text-[11px] text-slate-400 italic">{pay.comment}</p>}
+                      <div key={pay.id} className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl text-xs space-y-2">
+                        {isEditing ? (
+                          /* Modo Edición Inline */
+                          <div className="space-y-2 pt-1">
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditMovementType('payment')}
+                                className={`py-1 text-[10px] font-bold rounded-md ${
+                                  editMovementType === 'payment' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                Abono (-)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditMovementType('charge')}
+                                className={`py-1 text-[10px] font-bold rounded-md ${
+                                  editMovementType === 'charge' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                Cargo (+)
+                              </button>
+                            </div>
+
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editAmount}
+                              onChange={(e) => setEditAmount(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                            />
+
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <input
+                                type="date"
+                                value={editDate}
+                                onChange={(e) => setEditDate(e.target.value)}
+                                className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
+                              />
+                              <input
+                                type="text"
+                                value={editComment}
+                                onChange={(e) => setEditComment(e.target.value)}
+                                placeholder="Comentario"
+                                className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingPaymentId(null)}
+                                className="px-2.5 py-1 text-[11px] text-slate-400 hover:text-white"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEditedPayment(pay)}
+                                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] rounded-lg flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" /> Guardar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Modo Vista Normal */
+                          <div>
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span
+                                className={`font-bold flex items-center gap-1 ${
+                                  isPayment ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {isPayment ? (
+                                  <>
+                                    <ArrowDownLeft className="w-3.5 h-3.5" /> Abono: {formatCurrency(payNum)}
+                                  </>
+                                ) : (
+                                  <>
+                                    <ArrowUpRight className="w-3.5 h-3.5" /> Cargo: {formatCurrency(Math.abs(payNum))}
+                                  </>
+                                )}
+                              </span>
+
+                              <div className="flex items-center gap-2">
+                                <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                                  <Calendar className="w-3 h-3" /> {pay.payment_date}
+                                </span>
+                                <button
+                                  onClick={() => startEditingPayment(pay)}
+                                  className="text-slate-500 hover:text-indigo-400 transition"
+                                  title="Editar Movimiento"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePayment(pay)}
+                                  className="text-slate-500 hover:text-rose-400 transition"
+                                  title="Eliminar Movimiento"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            {pay.comment && <p className="text-[11px] text-slate-400 italic mt-0.5">{pay.comment}</p>}
+                          </div>
+                        )}
                       </div>
                     )
                   })
@@ -401,7 +586,7 @@ export default function DebtsPage() {
           ) : (
             <div className="text-center py-12 text-slate-500 space-y-2">
               <AlertCircle className="w-8 h-8 mx-auto text-slate-600" />
-              <p className="text-xs">Haz clic en una deuda para ver su historial y agregar abonos o cargos.</p>
+              <p className="text-xs">Haz clic en una deuda para ver su historial y agregar o gestionar abonos y cargos.</p>
             </div>
           )}
         </div>
@@ -415,10 +600,7 @@ export default function DebtsPage() {
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-indigo-400" /> Registrar Nueva Deuda
               </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white transition"
-              >
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition">
                 <X className="w-5 h-5" />
               </button>
             </div>
