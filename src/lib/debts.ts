@@ -3,12 +3,12 @@ import { createClient } from '@/lib/supabase/client'
 export interface Debt {
   id?: string
   name: string
-  debt_type: 'credit_card' | 'loan' | 'personal'
-  credit_limit?: number | null
+  description?: string | null
+  total_amount: number
   current_balance: number
-  minimum_payment?: number | null // <- Agrega esta línea
-  cutoff_day?: number | null
-  payment_due_day?: number | null
+  minimum_payment?: number | null
+  due_day?: number | null
+  interest_rate?: number | null
   created_at?: string
 }
 
@@ -31,7 +31,12 @@ export async function addDebt(debt: Omit<Debt, 'id' | 'created_at'>) {
 }
 
 export async function updateDebt(id: string, updates: Partial<Debt>) {
-  const { data, error } = await supabase.from('debts').update(updates).eq('id', id).select()
+  const { data, error } = await supabase
+    .from('debts')
+    .update(updates)
+    .eq('id', id)
+    .select()
+
   if (error) throw error
   return data
 }
