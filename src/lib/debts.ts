@@ -6,6 +6,7 @@ export interface Debt {
   debt_type: 'credit_card' | 'loan' | 'personal'
   credit_limit?: number | null
   current_balance: number
+  minimum_payment?: number | null // <- Agrega esta línea
   cutoff_day?: number | null
   payment_due_day?: number | null
   created_at?: string
