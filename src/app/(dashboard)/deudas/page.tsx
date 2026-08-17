@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent, Flame } from 'lucide-react'
+import { Plus, Trash2, History, CheckCircle2, Calendar, AlertCircle, X, DollarSign, Percent, Flame, ArrowUpRight, ArrowDownLeft } from 'lucide-react'
 
 // Helper para formatear siempre como $0,000.00
 const formatCurrency = (amount: number | null | undefined) => {
@@ -17,6 +17,9 @@ export default function DebtsPage() {
   const [debts, setDebts] = useState<any[]>([])
   const [selectedDebt, setSelectedDebt] = useState<any | null>(null)
   const [paymentsHistory, setPaymentsHistory] = useState<any[]>([])
+  
+  // Estado para movimientos (Abono o Cargo)
+  const [movementType, setMovementType] = useState<'payment' | 'charge'>('payment')
   const [amount, setAmount] = useState('')
   const [comment, setComment] = useState('')
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
@@ -97,29 +100,51 @@ export default function DebtsPage() {
     }
   }
 
-  async function handleRegisterPayment(e: React.FormEvent) {
+  async function handleRegisterMovement(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedDebt || !amount) return
 
-    const payAmount = Number(amount)
-    const currentBalance = selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0
-    const newBalance = Math.max(0, currentBalance - payAmount)
+    const inputAmount = Number(amount)
+    if (isNaN(inputAmount) || inputAmount <= 0) return
 
-    // 1. Guardar abono en el historial
-    await supabase.from('debt_payments').insert([
+    const isPayment = movementType === 'payment'
+    // Si es abono, en la tabla guardamos monto positivo. Si es cargo/gasto, guardamos monto negativo para diferenciar en historial
+    const storedAmount = isPayment ? inputAmount : -inputAmount
+
+    const currentBalance = selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0
+    // Si es abono resta al balance; si es cargo incrementa el balance
+    const newBalance = isPayment ? Math.max(0, currentBalance - inputAmount) : currentBalance + inputAmount
+
+    const defaultComment = isPayment ? 'Abono a deuda' : 'Cargo / Gasto recurrente'
+
+    // 1. Guardar movimiento en debt_payments
+    const { error: paymentError } = await supabase.from('debt_payments').insert([
       {
         debt_id: selectedDebt.id,
-        amount: payAmount,
+        amount: storedAmount,
         payment_date: paymentDate,
-        comment: comment || 'Abono a deuda',
+        comment: comment || defaultComment,
       },
     ])
 
-    // 2. Actualizar balance actual en la deuda principal
-    await supabase.from('debts').update({ current_balance: newBalance }).eq('id', selectedDebt.id)
+    if (paymentError) {
+      console.error('Error al registrar movimiento:', paymentError)
+      alert(`Error al registrar el movimiento: ${paymentError.message}`)
+      return
+    }
 
-    // 3. Celebración si se liquida
-    if (newBalance === 0) {
+    // 2. Actualizar el saldo actual de la deuda
+    const { error: updateError } = await supabase
+      .from('debts')
+      .update({ current_balance: newBalance })
+      .eq('id', selectedDebt.id)
+
+    if (updateError) {
+      console.error('Error al actualizar el saldo de la deuda:', updateError)
+    }
+
+    // 3. Celebración si un abono liquida la deuda por completo
+    if (isPayment && newBalance === 0) {
       setShowCelebration(true)
       setTimeout(() => setShowCelebration(false), 5000)
     }
@@ -133,7 +158,7 @@ export default function DebtsPage() {
   }
 
   async function handleDeleteDebt(debtId: string) {
-    if (!confirm('¿Deseas eliminar esta deuda y todo su historial de abonos?')) return
+    if (!confirm('¿Deseas eliminar esta deuda y todo su historial de movimientos?')) return
     await supabase.from('debts').delete().eq('id', debtId)
     if (selectedDebt?.id === debtId) setSelectedDebt(null)
     fetchDebts()
@@ -152,7 +177,7 @@ export default function DebtsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">Gestión de Deudas</h1>
-          <p className="text-slate-400 text-sm mt-1">Registra pagos, consulta movimientos y monitorea tus saldos y tasas.</p>
+          <p className="text-slate-400 text-sm mt-1">Registra pagos, cargos recurrentes y monitorea tus saldos y tasas.</p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
@@ -258,7 +283,7 @@ export default function DebtsPage() {
           )}
         </div>
 
-        {/* Historial y Abonos */}
+        {/* Historial y Registro de Movimientos (Abono / Cargo) */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
           {selectedDebt ? (
             <>
@@ -266,72 +291,117 @@ export default function DebtsPage() {
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <History className="w-5 h-5 text-indigo-400" /> Historial de {selectedDebt.name}
                 </h2>
-                <p className="text-xs text-slate-400">Registra abonos o revisa los movimientos guardados.</p>
+                <p className="text-xs text-slate-400">Registra abonos o compras/cargos recurrentes.</p>
               </div>
 
-              {(selectedDebt.current_balance ?? selectedDebt.initial_amount ?? 0) > 0 ? (
-                <form onSubmit={handleRegisterPayment} className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-                  <span className="text-xs font-semibold text-slate-300 block">Registrar Nuevo Abono</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Monto ($)"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    required
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="date"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                      className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Comentario"
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                      className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+              {/* Formulario de Registro de Movimiento */}
+              <form onSubmit={handleRegisterMovement} className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
+                {/* Selector Tipo de Movimiento */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
                   <button
-                    type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-2.5 rounded-xl transition shadow-lg shadow-indigo-600/20"
+                    type="button"
+                    onClick={() => setMovementType('payment')}
+                    className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                      movementType === 'payment'
+                        ? 'bg-emerald-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    Guardar Abono
+                    <ArrowDownLeft className="w-3.5 h-3.5" /> Abono (- Deuda)
                   </button>
-                </form>
-              ) : (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium text-center">
-                  🎉 ¡Esta deuda está completamente saldada!
+                  <button
+                    type="button"
+                    onClick={() => setMovementType('charge')}
+                    className={`py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                      movementType === 'charge'
+                        ? 'bg-rose-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" /> Cargo (+ Deuda)
+                  </button>
                 </div>
-              )}
+
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder={movementType === 'payment' ? 'Monto del Abono ($)' : 'Monto del Cargo / Gasto ($)'}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder={movementType === 'payment' ? 'Ej. Abono quincenal' : 'Ej. Suscripción, Cargorecurrente'}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className={`w-full font-semibold text-xs py-2.5 rounded-xl transition shadow-lg ${
+                    movementType === 'payment'
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
+                  }`}
+                >
+                  {movementType === 'payment' ? 'Guardar Abono' : 'Guardar Cargo'}
+                </button>
+              </form>
 
               {/* Lista de Movimientos */}
               <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                 {paymentsHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">No hay abonos registrados.</p>
+                  <p className="text-xs text-slate-500 text-center py-4">No hay movimientos registrados.</p>
                 ) : (
-                  paymentsHistory.map((pay) => (
-                    <div key={pay.id} className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl text-xs space-y-1">
-                      <div className="flex items-center justify-between text-slate-300">
-                        <span className="font-bold text-emerald-400">+{formatCurrency(pay.amount)}</span>
-                        <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                          <Calendar className="w-3 h-3" /> {pay.payment_date}
-                        </span>
+                  paymentsHistory.map((pay) => {
+                    const payNum = Number(pay.amount) || 0
+                    const isPayment = payNum >= 0
+
+                    return (
+                      <div key={pay.id} className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl text-xs space-y-1">
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span
+                            className={`font-bold flex items-center gap-1 ${
+                              isPayment ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {isPayment ? (
+                              <>
+                                <ArrowDownLeft className="w-3.5 h-3.5" /> Abono: {formatCurrency(payNum)}
+                              </>
+                            ) : (
+                              <>
+                                <ArrowUpRight className="w-3.5 h-3.5" /> Cargo: {formatCurrency(Math.abs(payNum))}
+                              </>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                            <Calendar className="w-3 h-3" /> {pay.payment_date}
+                          </span>
+                        </div>
+                        {pay.comment && <p className="text-[11px] text-slate-400 italic">{pay.comment}</p>}
                       </div>
-                      {pay.comment && <p className="text-[11px] text-slate-400 italic">{pay.comment}</p>}
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </>
           ) : (
             <div className="text-center py-12 text-slate-500 space-y-2">
               <AlertCircle className="w-8 h-8 mx-auto text-slate-600" />
-              <p className="text-xs">Haz clic en una deuda para ver su historial y agregar abonos.</p>
+              <p className="text-xs">Haz clic en una deuda para ver su historial y agregar abonos o cargos.</p>
             </div>
           )}
         </div>
