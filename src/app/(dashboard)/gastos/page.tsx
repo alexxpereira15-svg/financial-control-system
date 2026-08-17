@@ -6,11 +6,13 @@ import {
   getExpenses,
   toggleExpenseStatus,
   getPaymentDebts,
+  updateExpense,
+  deleteExpense,
   Expense,
   ExpenseFrequency,
   PaymentSource,
 } from '@/lib/expenses'
-import { CreditCard, Calendar, RefreshCw, CheckCircle, Clock } from 'lucide-react'
+import { CreditCard, Calendar, RefreshCw, CheckCircle, Clock, Pencil, Trash2, X } from 'lucide-react'
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -18,7 +20,10 @@ export default function ExpensesPage() {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
 
-  // Formulario
+  // Estado para edición
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
+
+  // Formulario de creación
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
   const [status, setStatus] = useState<'pending' | 'paid'>('paid')
@@ -79,6 +84,38 @@ export default function ExpensesPage() {
     }
   }
 
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingExpense || !editingExpense.id) return
+
+    try {
+      await updateExpense(editingExpense.id, {
+        title: editingExpense.title,
+        amount: Number(editingExpense.amount),
+        frequency: editingExpense.frequency,
+        status: editingExpense.status,
+        date: editingExpense.date,
+        debt_id: editingExpense.debt_id,
+      })
+      setEditingExpense(null)
+      await loadData()
+    } catch (err) {
+      console.error('Error al actualizar gasto:', err)
+    }
+  }
+
+  const handleDelete = async (exp: Expense) => {
+    if (!exp.id) return
+    if (!confirm(`¿Estás seguro de eliminar el gasto "${exp.title}"?`)) return
+
+    try {
+      await deleteExpense(exp.id, exp.amount, exp.status, exp.debt_id)
+      await loadData()
+    } catch (err) {
+      console.error('Error al eliminar gasto:', err)
+    }
+  }
+
   const handleToggleStatus = async (exp: Expense) => {
     if (!exp.id) return
     try {
@@ -89,7 +126,6 @@ export default function ExpensesPage() {
     }
   }
 
-  // Métricas
   const totalExpenses = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0)
   const totalPaid = expenses
     .filter((e) => e.status === 'paid')
@@ -103,11 +139,10 @@ export default function ExpensesPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Control de Gastos</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Registra tus consumos, automatiza cobros recurrentes y vincula gastos a tus tarjetas Nu o Santander.
+          Administra tus desembolsos fijos y variables, ajusta montos o elimina registros obsoletos.
         </p>
       </div>
 
-      {/* Indicadores clave */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-medium">Gasto Total</p>
@@ -132,18 +167,16 @@ export default function ExpensesPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Formulario */}
+        {/* Formulario de Registro */}
         <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg h-fit space-y-4">
           <h2 className="text-lg font-semibold">Nuevo Gasto</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                Concepto / Servicio
-              </label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Concepto / Servicio</label>
               <input
                 type="text"
-                placeholder="Ej. Renta, Luz, CFE, Netflix, Super"
+                placeholder="Ej. Renta, Luz, CFE, Netflix"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -152,9 +185,7 @@ export default function ExpensesPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                Monto (MXN)
-              </label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Monto (MXN)</label>
               <input
                 type="number"
                 step="0.01"
@@ -168,25 +199,21 @@ export default function ExpensesPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Recurrencia
-                </label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Recurrencia</label>
                 <select
                   value={frequency}
                   onChange={(e) => setFrequency(e.target.value as ExpenseFrequency)}
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
                 >
-                  <option value="one_time">Única vez</option>
-                  <option value="monthly">Mensual</option>
-                  <option value="bimonthly">Bimestral</option>
-                  <option value="yearly">Anual</option>
+                  <option value="one_time">Única vez (Variable)</option>
+                  <option value="monthly">Mensual (Fijo)</option>
+                  <option value="bimonthly">Bimestral (Fijo)</option>
+                  <option value="yearly">Anual (Fijo)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Estado Inicial
-                </label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Estado</label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as 'pending' | 'paid')}
@@ -198,19 +225,16 @@ export default function ExpensesPage() {
               </div>
             </div>
 
-            {/* Método de Pago y Vincular a Tarjeta / Deuda */}
             <div className="space-y-3 pt-1 border-t border-gray-800">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">
-                  Método de Pago
-                </label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Método de Pago</label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => handlePaymentMethodChange(e.target.value)}
                   className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-rose-500 text-white"
                 >
                   <option value="efectivo">Efectivo / Débito</option>
-                  <option value="tarjeta_credito">Tarjeta de Crédito (Vincular Deuda)</option>
+                  <option value="tarjeta_credito">Tarjeta de Crédito</option>
                   <option value="transferencia">Transferencia (SPEI)</option>
                 </select>
               </div>
@@ -218,7 +242,7 @@ export default function ExpensesPage() {
               {paymentMethod === 'tarjeta_credito' && (
                 <div className="bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2">
                   <label className="block text-xs font-medium text-indigo-400 flex items-center gap-1">
-                    <CreditCard className="w-3.5 h-3.5" /> Seleccionar Tarjeta / Cuenta:
+                    <CreditCard className="w-3.5 h-3.5" /> Seleccionar Tarjeta:
                   </label>
                   <select
                     value={selectedDebtId}
@@ -226,16 +250,13 @@ export default function ExpensesPage() {
                     required={paymentMethod === 'tarjeta_credito'}
                     className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 text-white"
                   >
-                    <option value="">-- Elige una tarjeta registrada --</option>
+                    <option value="">-- Elige una tarjeta --</option>
                     {paymentSources.map((source) => (
                       <option key={source.id} value={source.id}>
                         {source.name}
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-gray-500">
-                    Al marcar como pagado, el saldo consumido se cargará automáticamente a esta tarjeta.
-                  </p>
                 </div>
               )}
             </div>
@@ -261,7 +282,7 @@ export default function ExpensesPage() {
           </form>
         </div>
 
-        {/* Historial */}
+        {/* Historial con botones de edición/eliminación */}
         <div className="lg:col-span-2">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-lg">
             <div className="p-4 border-b border-gray-800 flex justify-between items-center">
@@ -272,9 +293,7 @@ export default function ExpensesPage() {
             {fetching ? (
               <div className="p-8 text-center text-sm text-gray-500">Cargando registros...</div>
             ) : expenses.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-500">
-                Aún no has registrado ningún gasto.
-              </div>
+              <div className="p-8 text-center text-sm text-gray-500">Aún no has registrado ningún gasto.</div>
             ) : (
               <div className="divide-y divide-gray-800">
                 {expenses.map((exp) => {
@@ -283,10 +302,26 @@ export default function ExpensesPage() {
                   return (
                     <div
                       key={exp.id}
-                      className="p-4 flex items-center justify-between hover:bg-gray-800/40 transition-colors"
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-800/40 transition-colors"
                     >
                       <div className="space-y-1">
-                        <p className="font-medium text-sm text-gray-100">{exp.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm text-gray-100">{exp.title}</p>
+                          <button
+                            onClick={() => setEditingExpense(exp)}
+                            className="text-gray-500 hover:text-indigo-400 p-1"
+                            title="Editar gasto"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(exp)}
+                            className="text-gray-500 hover:text-rose-400 p-1"
+                            title="Eliminar gasto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
 
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded capitalize flex items-center gap-1">
@@ -313,7 +348,7 @@ export default function ExpensesPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center justify-between sm:justify-end gap-4">
                         <button
                           onClick={() => handleToggleStatus(exp)}
                           className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors flex items-center gap-1 ${
@@ -345,6 +380,117 @@ export default function ExpensesPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Edición de Gasto */}
+      {editingExpense && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 w-full max-w-md rounded-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-800 pb-3">
+              <h3 className="font-bold text-gray-100">Editar Gasto</h3>
+              <button onClick={() => setEditingExpense(null)} className="text-gray-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Concepto</label>
+                <input
+                  type="text"
+                  value={editingExpense.title}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, title: e.target.value })}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Monto (MXN)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editingExpense.amount}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, amount: Number(e.target.value) })}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Recurrencia</label>
+                  <select
+                    value={editingExpense.frequency}
+                    onChange={(e) =>
+                      setEditingExpense({ ...editingExpense, frequency: e.target.value as ExpenseFrequency })
+                    }
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  >
+                    <option value="one_time">Única vez</option>
+                    <option value="monthly">Mensual</option>
+                    <option value="bimonthly">Bimestral</option>
+                    <option value="yearly">Anual</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Estado</label>
+                  <select
+                    value={editingExpense.status}
+                    onChange={(e) =>
+                      setEditingExpense({ ...editingExpense, status: e.target.value as 'pending' | 'paid' })
+                    }
+                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  >
+                    <option value="paid">Pagado</option>
+                    <option value="pending">Pendiente</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Tarjeta Vinculada</label>
+                <select
+                  value={editingExpense.debt_id || ''}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, debt_id: e.target.value || null })}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                >
+                  <option value="">Sin tarjeta vinculada</option>
+                  {paymentSources.map((source) => (
+                    <option key={source.id} value={source.id}>
+                      {source.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Fecha</label>
+                <input
+                  type="date"
+                  value={editingExpense.date}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, date: e.target.value })}
+                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="px-3 py-1.5 text-xs text-gray-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
