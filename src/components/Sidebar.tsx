@@ -9,6 +9,7 @@ import {
   TrendingDown,  // Icono para Gastos
   TrendingUp,    // Icono para Ingresos
   Target,        // Icono para Metas
+  Reports,       // Icono para Reportes
 } from 'lucide-react'
 
 const navigation = [
