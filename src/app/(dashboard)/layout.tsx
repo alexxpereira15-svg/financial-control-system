@@ -9,7 +9,8 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
       <Sidebar />
-      <main className="flex-1 lg:ml-64 min-h-screen p-6 lg:p-10">
+      {/* flex-1 asegura que el contenido ocupe exactamente todo el espacio restante sin amontonarse */}
+      <main className="flex-1 min-w-0 p-6 lg:p-8">
         {children}
       </main>
     </div>
