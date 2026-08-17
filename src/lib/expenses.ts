@@ -1,12 +1,22 @@
 import { createClient } from '@/lib/supabase/client'
 import { getAccountById, updateAccount } from '@/lib/accounts'
 
+export type ExpenseFrequency = 
+  | 'unique' 
+  | 'weekly' 
+  | 'biweekly' 
+  | 'monthly' 
+  | 'bimonthly' 
+  | 'quarterly' 
+  | 'annual'
+
 export interface Expense {
   id?: string
   amount: number
   description: string
   category: string
   account_id: string
+  frequency: ExpenseFrequency
   date?: string
   created_at?: string
 }
@@ -24,7 +34,6 @@ export async function getExpenses(): Promise<Expense[]> {
 }
 
 export async function addExpense(expense: Omit<Expense, 'id' | 'created_at'>) {
-  // 1. Registrar el gasto
   const { data, error } = await supabase
     .from('expenses')
     .insert([expense])
@@ -33,15 +42,12 @@ export async function addExpense(expense: Omit<Expense, 'id' | 'created_at'>) {
 
   if (error) throw error
 
-  // 2. Obtener la cuenta seleccionada para ajustar su saldo
   if (expense.account_id) {
     const account = await getAccountById(expense.account_id)
     if (account) {
       const currentBalance = Number(account.current_balance || 0)
       const expenseAmount = Number(expense.amount)
 
-      // Si es tarjeta de crédito, el gasto AUMENTA la deuda acumulada
-      // Si es débito/efectivo, el gasto DISMINUYE el dinero disponible
       const newBalance =
         account.account_type === 'credit_card'
           ? currentBalance + expenseAmount
@@ -55,7 +61,6 @@ export async function addExpense(expense: Omit<Expense, 'id' | 'created_at'>) {
 }
 
 export async function deleteExpense(id: string) {
-  // 1. Obtener los datos del gasto antes de borrarlo para revertir el saldo
   const { data: expense, error: fetchError } = await supabase
     .from('expenses')
     .select('*')
@@ -64,7 +69,6 @@ export async function deleteExpense(id: string) {
 
   if (fetchError) throw fetchError
 
-  // 2. Revertir el saldo en la cuenta
   if (expense && expense.account_id) {
     const account = await getAccountById(expense.account_id)
     if (account) {
@@ -80,7 +84,6 @@ export async function deleteExpense(id: string) {
     }
   }
 
-  // 3. Eliminar el gasto
   const { error } = await supabase.from('expenses').delete().eq('id', id)
   if (error) throw error
 }
