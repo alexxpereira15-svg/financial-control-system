@@ -14,8 +14,8 @@ import {
 
 const navigation = [
 
-  { name: 'Dashboard', href: '/src/(dashboard)/dashboard', icon: LayoutDashboard },
-  { name: 'Ingresos', href: '/src/(dashboard)/ingresos', icon: TrendingUp },
+  { name: 'Dashboard', href: '/src/app/(dashboard)/dashboard', icon: LayoutDashboard },
+  { name: 'Ingresos', href: '/src/app/(dashboard)/ingresos', icon: TrendingUp },
   { name: 'Gastos', href: '/gastos', icon: TrendingDown },
   { name: 'Cuentas', href: '/accounts', icon: Wallet },       // <- Nueva pestaña Cuentas
   { name: 'Deudas', href: '/deudas', icon: CreditCard },        // <- Nueva pestaña Deudas
