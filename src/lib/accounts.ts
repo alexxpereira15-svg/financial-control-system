@@ -49,3 +49,16 @@ export async function deleteAccount(id: string) {
   const { error } = await supabase.from('accounts').delete().eq('id', id)
   if (error) throw error
 }
+export async function getAccountById(id: string): Promise<Account | null> {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error) {
+    console.error('Error al obtener la cuenta:', error)
+    return null
+  }
+  return data
+}
