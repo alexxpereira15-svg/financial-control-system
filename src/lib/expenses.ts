@@ -32,7 +32,6 @@ export async function getExpenses(): Promise<Expense[]> {
   return data || []
 }
 
-// Obtener las tarjetas de crédito / deudas activas para el select del formulario
 export async function getPaymentDebts(): Promise<PaymentSource[]> {
   const { data, error } = await supabase
     .from('debts')
@@ -47,12 +46,33 @@ export async function addExpense(expense: Omit<Expense, 'id' | 'created_at'>) {
   const { data, error } = await supabase.from('expenses').insert([expense]).select().single()
   if (error) throw error
 
-  // Si el gasto ingresa como PAGADO y tiene una tarjeta/deuda vinculada, impactamos el saldo
   if (expense.status === 'paid' && expense.debt_id) {
     await updateDebtBalance(expense.debt_id, expense.amount, 'add')
   }
 
   return data
+}
+
+// Actualizar un gasto existente
+export async function updateExpense(id: string, updates: Partial<Expense>) {
+  const { data, error } = await supabase
+    .from('expenses')
+    .update(updates)
+    .eq('id', id)
+    .select()
+
+  if (error) throw error
+  return data
+}
+
+// Eliminar un gasto y reajustar la deuda si estaba liquidado con tarjeta
+export async function deleteExpense(id: string, amount: number, status: 'pending' | 'paid', debtId?: string | null) {
+  const { error } = await supabase.from('expenses').delete().eq('id', id)
+  if (error) throw error
+
+  if (status === 'paid' && debtId) {
+    await updateDebtBalance(debtId, amount, 'subtract')
+  }
 }
 
 export async function toggleExpenseStatus(id: string, currentStatus: 'pending' | 'paid', amount: number, debtId?: string | null) {
@@ -65,14 +85,12 @@ export async function toggleExpenseStatus(id: string, currentStatus: 'pending' |
 
   if (error) throw error
 
-  // Si tiene deuda vinculada, sumamos o restamos del saldo de la tarjeta
   if (debtId) {
     const action = newStatus === 'paid' ? 'add' : 'subtract'
     await updateDebtBalance(debtId, amount, action)
   }
 }
 
-// Función auxiliar para actualizar el saldo corriente de la tarjeta/deuda
 async function updateDebtBalance(debtId: string, amount: number, action: 'add' | 'subtract') {
   const { data: debt } = await supabase.from('debts').select('current_balance').eq('id', debtId).single()
   if (!debt) return
