@@ -12,12 +12,14 @@ import {
 } from 'lucide-react'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Ingresos', href: '/incomes', icon: TrendingUp },
-  { name: 'Gastos', href: '/expenses', icon: TrendingDown },
+
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Ingresos', href: '/ingresos', icon: TrendingUp },
+  { name: 'Gastos', href: '/gastos', icon: TrendingDown },
   { name: 'Cuentas', href: '/accounts', icon: Wallet },       // <- Nueva pestaña Cuentas
-  { name: 'Deudas', href: '/debts', icon: CreditCard },        // <- Nueva pestaña Deudas
-  { name: 'Metas', href: '/goals', icon: Target },
+  { name: 'Deudas', href: '/deudas', icon: CreditCard },        // <- Nueva pestaña Deudas
+  { name: 'Metas', href: '/metas', icon: Target },
+  { name: 'Reportes', href: '/reportes', icon: Reports },
 ]
 
 export default function Sidebar() {
