@@ -1,66 +1,93 @@
 import { createClient } from '@/lib/supabase/client'
 import { getAccountById, updateAccount } from '@/lib/accounts'
 
-const supabase = createClient()
-
-export async function makePaymentOrTransfer(params: {
-  fromAccountId: string
-  toAccountId?: string // Si pagas una Tarjeta de Crédito u otra cuenta
-  toDebtId?: string    // Si pagas un Préstamo directo
+export interface Transfer {
+  id?: string
+  from_account_id: string
+  to_account_id?: string | null
+  to_debt_id?: string | null
   amount: number
   description: string
   date: string
-}) {
-  const { fromAccountId, toAccountId, toDebtId, amount, description, date } = params
+  created_at?: string
+}
 
-  // 1. Descontar saldo de la cuenta de origen (ej. Débito o Efectivo)
-  const sourceAccount = await getAccountById(fromAccountId)
+const supabase = createClient()
+
+export async function getTransfers() {
+  const { data, error } = await supabase
+    .from('transfers')
+    .select(`
+      *,
+      from_account:accounts!from_account_id(name, account_type),
+      to_account:accounts!to_account_id(name, account_type),
+      to_debt:debts!to_debt_id(name)
+    `)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error al obtener transferencias:', error)
+    throw error
+  }
+  return data || []
+}
+
+export async function addTransfer(transfer: Omit<Transfer, 'id' | 'created_at'>) {
+  const { from_account_id, to_account_id, to_debt_id, amount, description, date } = transfer
+
+  // 1. Restar dinero de la cuenta de origen (débito/efectivo)
+  const sourceAccount = await getAccountById(from_account_id)
   if (sourceAccount) {
     const currentBal = Number(sourceAccount.current_balance || 0)
-    await updateAccount(fromAccountId, { current_balance: currentBal - amount })
+    await updateAccount(from_account_id, { current_balance: currentBal - Number(amount) })
   }
 
-  // 2. Aplicar el pago a la cuenta destino (si es Tarjeta de Crédito, reduce el saldo deudor)
-  if (toAccountId) {
-    const targetAccount = await getAccountById(toAccountId)
+  // 2. Si el destino es una tarjeta o cuenta bancaria
+  if (to_account_id) {
+    const targetAccount = await getAccountById(to_account_id)
     if (targetAccount) {
-      const targetBal = Number(targetAccount.current_balance || 0)
-      // En tarjetas de crédito, abonos reducen el balance utilizado
-      const newBal = targetAccount.account_type === 'credit_card' 
-        ? targetBal - amount 
-        : targetBal + amount
+      const currentBal = Number(targetAccount.current_balance || 0)
+      // Si es tarjeta de crédito, un abono reduce la deuda; si es cuenta/débito, aumenta el saldo
+      const updatedBal =
+        targetAccount.account_type === 'credit_card'
+          ? currentBal - Number(amount)
+          : currentBal + Number(amount)
 
-      await updateAccount(toAccountId, { current_balance: newBal })
+      await updateAccount(to_account_id, { current_balance: updatedBal })
     }
   }
 
-  // 3. O si es un préstamo directo en la tabla `debts`
-  if (toDebtId) {
-    const { data: debt } = await supabase.from('debts').select('*').eq('id', toDebtId).single()
+  // 3. Si el destino es un préstamo directo de la tabla debts
+  if (to_debt_id) {
+    const { data: debt } = await supabase.from('debts').select('*').eq('id', to_debt_id).single()
     if (debt) {
       const currentDebtBal = Number(debt.current_balance || 0)
       await supabase
         .from('debts')
-        .update({ current_balance: Math.max(0, currentDebtBal - amount) })
-        .eq('id', toDebtId)
+        .update({ current_balance: Math.max(0, currentDebtBal - Number(amount)) })
+        .eq('id', to_debt_id)
     }
   }
 
-  // 4. Registrar la transferencia para historial sin alterar la tabla 'incomes' ni 'expenses'
+  // 4. Guardar registro histórico
   const { data, error } = await supabase
     .from('transfers')
     .insert([
       {
-        from_account_id: fromAccountId,
-        to_account_id: toAccountId || null,
-        to_debt_id: toDebtId || null,
-        amount,
+        from_account_id,
+        to_account_id: to_account_id || null,
+        to_debt_id: to_debt_id || null,
+        amount: Number(amount),
         description,
         date,
       },
     ])
     .select()
 
-  if (error) throw error
+  if (error) {
+    console.error('Error al registrar la transferencia:', error)
+    throw error
+  }
+
   return data
 }
