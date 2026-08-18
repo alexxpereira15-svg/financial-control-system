@@ -13,12 +13,14 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  ArrowRightLeft,
 } from 'lucide-react'
 
 const navLinks = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Ingresos', href: '/ingresos', icon: TrendingUp },
   { name: 'Gastos', href: '/gastos', icon: TrendingDown },
+  { name: 'Transferencias', href: '/transferencias', icon: ArrowRightLeft },
   { name: 'Cuentas', href: '/accounts', icon: Wallet },
   { name: 'Deudas', href: '/deudas', icon: CreditCard },
   { name: 'Metas', href: '/metas', icon: Target },
