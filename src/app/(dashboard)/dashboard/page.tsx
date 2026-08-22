@@ -6,6 +6,7 @@ import { getExpenses } from '@/lib/expenses'
 import { getDebts } from '@/lib/debts'
 import { getAccounts } from '@/lib/accounts'
 import { analyzeFinancialHealth, HealthReport } from '@/lib/financialEngine'
+import { processRecurringTransactions } from '@/lib/recurringEngine'
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
@@ -21,6 +22,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboardData()
+    const initApp = async () => {
+    // 1. Procesa cobros y depósitos fijos pendientes
+    await processRecurringTransactions()
+    
+    // 2. Carga los datos actualizados del Dashboard
+    fetchDashboardData()
+  }
+
+  initApp()
+}, [])
   }, [])
 
   const fetchDashboardData = async () => {
