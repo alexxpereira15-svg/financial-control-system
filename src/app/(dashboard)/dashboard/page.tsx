@@ -21,17 +21,12 @@ export default function DashboardPage() {
   const [report, setReport] = useState<HealthReport | null>(null)
 
   useEffect(() => {
-    fetchDashboardData()
     const initApp = async () => {
-    // 1. Procesa cobros y depósitos fijos pendientes
-    await processRecurringTransactions()
-    
-    // 2. Carga los datos actualizados del Dashboard
-    fetchDashboardData()
-  }
+      await processRecurringTransactions()
+      await fetchDashboardData()
+    }
 
-  initApp()
-}, [])
+    initApp()
   }, [])
 
   const fetchDashboardData = async () => {
