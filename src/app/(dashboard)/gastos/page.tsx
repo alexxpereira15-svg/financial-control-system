@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { getExpenses, addExpense, deleteExpense, ExpenseFrequency } from '@/lib/expenses'
 import { getAccounts, Account } from '@/lib/accounts'
-import { Plus, Trash2, Wallet, DollarSign, Tag, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Wallet, DollarSign, Tag } from 'lucide-react'
 
 const FREQUENCY_LABELS: Record<ExpenseFrequency, string> = {
   unique: 'Única vez',
@@ -41,8 +41,10 @@ export default function GastosPage() {
       ])
       setExpenses(expensesData)
       setAccounts(accountsData)
-      if (accountsData.length > 0 && !accountId) {
-        setAccountId(accountsData[0].id!)
+
+      // Asignación explícita de la primera cuenta activa si no hay una seleccionada
+      if (accountsData.length > 0) {
+        setAccountId((prev) => (prev ? prev : accountsData[0].id!))
       }
     } catch (err) {
       console.error('Error al cargar gastos:', err)
@@ -53,7 +55,14 @@ export default function GastosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!amount || !description || !accountId) return
+    
+    // Si por alguna razón accountId no está listo, se asigna la primera cuenta del estado
+    const targetAccountId = accountId || (accounts.length > 0 ? accounts[0].id : null)
+
+    if (!amount || !description || !targetAccountId) {
+      alert('Por favor completa todos los campos y selecciona una cuenta válida.')
+      return
+    }
 
     setLoading(true)
     try {
@@ -61,9 +70,9 @@ export default function GastosPage() {
         amount: parseFloat(amount),
         description,
         category,
-        account_id: accountId,
+        account_id: targetAccountId,
         frequency,
-        date: new Date().toISOString(),
+        date: new Date().toISOString().split('T')[0], // Formato limpio YYYY-MM-DD
       })
 
       setAmount('')
@@ -72,6 +81,7 @@ export default function GastosPage() {
       await loadData()
     } catch (err) {
       console.error('Error al agregar gasto:', err)
+      alert('Ocurrió un error al guardar el gasto. Revisa la consola o las políticas de Supabase.')
     } finally {
       setLoading(false)
     }
@@ -186,17 +196,21 @@ export default function GastosPage() {
                 required
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
               >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} ({acc.account_type === 'credit_card' ? 'Tarjeta Crédito' : 'Efectivo/Débito'})
-                  </option>
-                ))}
+                {accounts.length === 0 ? (
+                  <option value="">No hay cuentas registradas</option>
+                ) : (
+                  accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.account_type === 'credit_card' ? 'Tarjeta Crédito' : 'Efectivo/Débito'})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || accounts.length === 0}
               className="w-full bg-rose-600 hover:bg-rose-500 font-medium py-2 rounded-lg text-sm transition-colors text-white disabled:opacity-50"
             >
               {loading ? 'Guardando...' : 'Guardar Gasto'}
