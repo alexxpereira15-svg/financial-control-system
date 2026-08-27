@@ -9,6 +9,8 @@ export interface Account {
   credit_limit?: number | null
   initial_balance?: number | null
   current_balance: number
+  reserved_balance?: number | null // Dinero en Apartados / Cajitas
+  yield_rate?: number | null       // Tasa de Rendimiento Anual (%)
   cutoff_day?: number | null
   payment_due_day?: number | null
   annual_interest_rate?: number | null
