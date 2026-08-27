@@ -47,7 +47,6 @@ export async function addTransfer(transfer: Omit<Transfer, 'id' | 'created_at'>)
     const targetAccount = await getAccountById(to_account_id)
     if (targetAccount) {
       const currentBal = Number(targetAccount.current_balance || 0)
-      // Si es tarjeta de crédito, un abono reduce la deuda; si es cuenta/débito, aumenta el saldo
       const updatedBal =
         targetAccount.account_type === 'credit_card'
           ? currentBal - Number(amount)
@@ -57,7 +56,7 @@ export async function addTransfer(transfer: Omit<Transfer, 'id' | 'created_at'>)
     }
   }
 
-  // 3. Si el destino es un préstamo directo de la tabla debts
+  // 3. Si el destino es un préstamo directo
   if (to_debt_id) {
     const { data: debt } = await supabase.from('debts').select('*').eq('id', to_debt_id).single()
     if (debt) {
@@ -84,10 +83,78 @@ export async function addTransfer(transfer: Omit<Transfer, 'id' | 'created_at'>)
     ])
     .select()
 
-  if (error) {
-    console.error('Error al registrar la transferencia:', error)
-    throw error
+  if (error) throw error
+  return data
+}
+
+export async function deleteTransfer(id: string) {
+  // 1. Obtener los datos de la transferencia antes de borrarla
+  const { data: transfer, error: fetchError } = await supabase
+    .from('transfers')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (fetchError) throw fetchError
+
+  if (transfer) {
+    const amount = Number(transfer.amount)
+
+    // Revertir origen: Devolver el dinero a la cuenta de donde salió
+    if (transfer.from_account_id) {
+      const source = await getAccountById(transfer.from_account_id)
+      if (source) {
+        await updateAccount(source.id!, {
+          current_balance: Number(source.current_balance || 0) + amount,
+        })
+      }
+    }
+
+    // Revertir destino: Restar de la cuenta o sumar a la deuda
+    if (transfer.to_account_id) {
+      const target = await getAccountById(transfer.to_account_id)
+      if (target) {
+        const curBal = Number(target.current_balance || 0)
+        const revertedBal =
+          target.account_type === 'credit_card' ? curBal + amount : curBal - amount
+        await updateAccount(target.id!, { current_balance: revertedBal })
+      }
+    }
+
+    if (transfer.to_debt_id) {
+      const { data: debt } = await supabase
+        .from('debts')
+        .select('*')
+        .eq('id', transfer.to_debt_id)
+        .single()
+
+      if (debt) {
+        await supabase
+          .from('debts')
+          .update({ current_balance: Number(debt.current_balance || 0) + amount })
+          .eq('id', transfer.to_debt_id)
+      }
+    }
   }
 
-  return data
+  // 2. Borrar registro
+  const { error } = await supabase.from('transfers').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function updateTransfer(id: string, updates: Partial<Transfer>, oldTransfer: any) {
+  // Primero revertimos los saldos con la transferencia previa
+  await deleteTransfer(id)
+  
+  // Luego aplicamos el nuevo monto/destino con la transferencia actualizada
+  const updatedData = {
+    from_account_id: updates.from_account_id || oldTransfer.from_account_id,
+    to_account_id: updates.to_account_id ?? oldTransfer.to_account_id,
+    to_debt_id: updates.to_debt_id ?? oldTransfer.to_debt_id,
+    amount: updates.amount ?? oldTransfer.amount,
+    description: updates.description || oldTransfer.description,
+    date: updates.date || oldTransfer.date,
+  }
+
+  return await addTransfer(updatedData)
 }
