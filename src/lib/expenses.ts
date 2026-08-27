@@ -17,7 +17,9 @@ export interface Expense {
   category: string
   account_id: string
   frequency: ExpenseFrequency
+  recurring_day?: number | null // Día del mes para el cargo automático
   date?: string
+  last_processed_date?: string | null
   created_at?: string
 }
 
@@ -42,7 +44,9 @@ export async function addExpense(expense: Omit<Expense, 'id' | 'created_at'>) {
 
   if (error) throw error
 
-  if (expense.account_id) {
+  // Si es un gasto puntual ('unique'), aplica el cargo inmediatamente a la cuenta.
+  // Si es recurrente, el motor 'recurringEngine' lo procesará al llegar su día programado.
+  if (expense.frequency === 'unique' && expense.account_id) {
     const account = await getAccountById(expense.account_id)
     if (account) {
       const currentBalance = Number(account.current_balance || 0)
