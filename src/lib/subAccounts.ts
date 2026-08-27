@@ -34,6 +34,19 @@ export async function addSubAccount(subAccount: Omit<SubAccount, 'id' | 'created
   return data
 }
 
+export async function deleteSubAccount(subAccountId: string, currentBalance: number) {
+  if (currentBalance > 0) {
+    throw new Error('No puedes eliminar un apartado con saldo. Regresa el dinero a disponible primero.')
+  }
+
+  const { error } = await supabase
+    .from('sub_accounts')
+    .delete()
+    .eq('id', subAccountId)
+
+  if (error) throw error
+}
+
 // Transferir fondos entre la cuenta principal y una cajita/apartado
 export async function transferToSubAccount(params: {
   subAccountId: string
