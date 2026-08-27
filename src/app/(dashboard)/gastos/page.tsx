@@ -43,7 +43,6 @@ export default function GastosPage() {
       setExpenses(expensesData)
       setAccounts(accountsData)
 
-      // Asignación explícita de la primera cuenta activa si no hay una seleccionada
       if (accountsData.length > 0) {
         setAccountId((prev) => (prev ? prev : accountsData[0].id!))
       }
@@ -57,7 +56,6 @@ export default function GastosPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Si por alguna razón accountId no está listo, se asigna la primera cuenta del estado
     const targetAccountId = accountId || (accounts.length > 0 ? accounts[0].id : null)
 
     if (!amount || !description || !targetAccountId) {
@@ -73,12 +71,14 @@ export default function GastosPage() {
         category,
         account_id: targetAccountId,
         frequency,
-        date: new Date().toISOString().split('T')[0], // Formato limpio YYYY-MM-DD
+        recurring_day: frequency !== 'unique' ? parseInt(recurringDay) : null,
+        date: new Date().toISOString().split('T')[0],
       })
 
       setAmount('')
       setDescription('')
       setFrequency('unique')
+      setRecurringDay('1')
       await loadData()
     } catch (err) {
       console.error('Error al agregar gasto:', err)
@@ -189,6 +189,25 @@ export default function GastosPage() {
               </div>
             </div>
 
+            {/* Selector de día para cargos automáticos */}
+            {frequency !== 'unique' && (
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Día del Mes para Cargo Automático
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  placeholder="Ej. 15 (Día de corte)"
+                  value={recurringDay}
+                  onChange={(e) => setRecurringDay(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+                />
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Cuenta / Método de Pago</label>
               <select
@@ -252,21 +271,7 @@ export default function GastosPage() {
                               : 'bg-slate-800 text-slate-400 border-slate-700'
                           }`}
                         >
-                          {{frequency !== 'unique' && (
-                            <div>
-                              <label className="block text-xs font-medium text-slate-400 mb-1">
-                                Día del Mes para Cargo Automático
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                max="31"
-                                placeholder="Ej. 15 (Día de corte)"
-                                value={recurringDay}
-                                onChange={(e) => setRecurringDay(e.target.value)}
-                                required
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
-                              />}
+                          {FREQUENCY_LABELS[freqKey] || 'Única vez'}
                         </span>
                       </div>
 
