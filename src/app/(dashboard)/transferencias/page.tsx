@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { getAccounts, Account } from '@/lib/accounts'
 import { getDebts, Debt } from '@/lib/debts'
-import { addTransfer, getTransfers } from '@/lib/transfers'
-import { ArrowRightLeft, Send, Landmark, CreditCard, ShieldCheck } from 'lucide-react'
+import { addTransfer, getTransfers, updateTransfer, deleteTransfer } from '@/lib/transfers'
+import { ArrowRightLeft, Send, Trash2, Pencil, X, DollarSign } from 'lucide-react'
 
 export default function TransferenciasPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -14,7 +14,10 @@ export default function TransferenciasPage() {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
 
-  // Formulario
+  // Estado para edición
+  const [editingTransfer, setEditingTransfer] = useState<any | null>(null)
+
+  // Formulario de Alta
   const [fromAccountId, setFromAccountId] = useState('')
   const [destinationType, setDestinationType] = useState<'account' | 'debt'>('account')
   const [toAccountId, setToAccountId] = useState('')
@@ -41,7 +44,8 @@ export default function TransferenciasPage() {
       setHistory(transfersData)
 
       if (accountsData.length > 0 && !fromAccountId) {
-        setFromAccountId(accountsData[0].id!)
+        const cashAcc = accountsData.find((a) => a.account_type !== 'credit_card')
+        setFromAccountId(cashAcc ? cashAcc.id! : accountsData[0].id!)
       }
     } catch (err) {
       console.error('Error al cargar transferencias:', err)
@@ -78,6 +82,49 @@ export default function TransferenciasPage() {
     }
   }
 
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingTransfer || !editingTransfer.id) return
+
+    setLoading(true)
+    try {
+      const old = history.find((t) => t.id === editingTransfer.id)
+      await updateTransfer(
+        editingTransfer.id,
+        {
+          from_account_id: editingTransfer.from_account_id,
+          to_account_id: editingTransfer.to_account_id,
+          to_debt_id: editingTransfer.to_debt_id,
+          amount: Number(editingTransfer.amount),
+          description: editingTransfer.description,
+          date: editingTransfer.date,
+        },
+        old
+      )
+
+      setEditingTransfer(null)
+      await loadData()
+    } catch (err) {
+      console.error('Error al actualizar transferencia:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('¿Deseas eliminar este movimiento? Se restablecerán los saldos en las cuentas implicadas.'))
+      return
+
+    try {
+      await deleteTransfer(id)
+      await loadData()
+    } catch (err) {
+      console.error('Error al eliminar transferencia:', err)
+    }
+  }
+
+  const totalTransferred = history.reduce((acc, curr) => acc + Number(curr.amount || 0), 0)
+
   return (
     <div className="p-6 md:p-8 bg-slate-950 min-h-screen text-slate-100 space-y-8">
       <div>
@@ -85,6 +132,19 @@ export default function TransferenciasPage() {
         <p className="text-sm text-slate-400 mt-1">
           Mueve dinero entre tus cuentas o realiza abonos a tus tarjetas y préstamos sin alterar tu flujo neto.
         </p>
+      </div>
+
+      {/* Tarjeta de Resumen */}
+      <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center gap-4 max-w-sm">
+        <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <DollarSign className="w-6 h-6" />
+        </div>
+        <div>
+          <p className="text-xs text-slate-400">Total Movilizado en Traspasos</p>
+          <p className="text-2xl font-bold text-indigo-400 mt-0.5">
+            ${totalTransferred.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -246,8 +306,7 @@ export default function TransferenciasPage() {
           ) : (
             <div className="space-y-3">
               {history.map((t) => {
-                const destinationName =
-                  t.to_account?.name || t.to_debt?.name || 'Destino'
+                const destinationName = t.to_account?.name || t.to_debt?.name || 'Destino'
 
                 return (
                   <div
@@ -264,8 +323,26 @@ export default function TransferenciasPage() {
                       </div>
                     </div>
 
-                    <div className="font-bold text-indigo-400 text-sm">
-                      ${Number(t.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                    <div className="flex items-center gap-4">
+                      <div className="font-bold text-indigo-400 text-sm">
+                        ${Number(t.amount).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingTransfer(t)}
+                          className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
+                          title="Editar"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(t.id)}
+                          className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )
@@ -274,6 +351,87 @@ export default function TransferenciasPage() {
           )}
         </div>
       </div>
+
+      {/* Modal de Edición */}
+      {editingTransfer && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-slate-100">Editar Pago / Traspaso</h3>
+              <button onClick={() => setEditingTransfer(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Concepto / Nota</label>
+                <input
+                  type="text"
+                  value={editingTransfer.description}
+                  onChange={(e) => setEditingTransfer({ ...editingTransfer, description: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Monto ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editingTransfer.amount}
+                  onChange={(e) => setEditingTransfer({ ...editingTransfer, amount: Number(e.target.value) })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Cuenta Origen</label>
+                <select
+                  value={editingTransfer.from_account_id}
+                  onChange={(e) => setEditingTransfer({ ...editingTransfer, from_account_id: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                >
+                  {accounts
+                    .filter((a) => a.account_type !== 'credit_card')
+                    .map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Fecha</label>
+                <input
+                  type="date"
+                  value={editingTransfer.date}
+                  onChange={(e) => setEditingTransfer({ ...editingTransfer, date: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTransfer(null)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors"
+                >
+                  {loading ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
