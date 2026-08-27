@@ -16,8 +16,9 @@ import {
   Pencil,
   Calendar,
   Wallet,
-  DollarSign,
   X,
+  Lock,
+  TrendingUp,
   Percent,
 } from 'lucide-react'
 
@@ -31,9 +32,11 @@ export default function AccountsPage() {
 
   // Formulario de nueva cuenta
   const [name, setName] = useState('')
-  const [accountType, setAccountType] = useState<AccountType>('credit_card')
+  const [accountType, setAccountType] = useState<AccountType>('debit')
   const [creditLimit, setCreditLimit] = useState('')
   const [initialBalance, setInitialBalance] = useState('')
+  const [reservedBalance, setReservedBalance] = useState('')
+  const [yieldRate, setYieldRate] = useState('')
   const [cutoffDay, setCutoffDay] = useState('')
   const [paymentDueDay, setPaymentDueDay] = useState('')
   const [annualInterestRate, setAnnualInterestRate] = useState('')
@@ -66,7 +69,9 @@ export default function AccountsPage() {
         account_type: accountType,
         credit_limit: accountType === 'credit_card' && creditLimit ? parseFloat(creditLimit) : null,
         initial_balance: initBal,
-        current_balance: initBal, // Inicia igual al saldo inicial
+        current_balance: initBal,
+        reserved_balance: accountType === 'debit' && reservedBalance ? parseFloat(reservedBalance) : 0,
+        yield_rate: accountType === 'debit' && yieldRate ? parseFloat(yieldRate) : 0,
         cutoff_day: accountType === 'credit_card' && cutoffDay ? parseInt(cutoffDay) : null,
         payment_due_day: accountType === 'credit_card' && paymentDueDay ? parseInt(paymentDueDay) : null,
         annual_interest_rate: accountType === 'credit_card' && annualInterestRate ? parseFloat(annualInterestRate) : null,
@@ -77,6 +82,8 @@ export default function AccountsPage() {
       setName('')
       setCreditLimit('')
       setInitialBalance('')
+      setReservedBalance('')
+      setYieldRate('')
       setCutoffDay('')
       setPaymentDueDay('')
       setAnnualInterestRate('')
@@ -100,6 +107,8 @@ export default function AccountsPage() {
         credit_limit: editingAccount.credit_limit ? Number(editingAccount.credit_limit) : null,
         initial_balance: editingAccount.initial_balance ? Number(editingAccount.initial_balance) : 0,
         current_balance: Number(editingAccount.current_balance),
+        reserved_balance: editingAccount.reserved_balance ? Number(editingAccount.reserved_balance) : 0,
+        yield_rate: editingAccount.yield_rate ? Number(editingAccount.yield_rate) : 0,
         cutoff_day: editingAccount.cutoff_day ? Number(editingAccount.cutoff_day) : null,
         payment_due_day: editingAccount.payment_due_day ? Number(editingAccount.payment_due_day) : null,
         annual_interest_rate: editingAccount.annual_interest_rate ? Number(editingAccount.annual_interest_rate) : null,
@@ -124,64 +133,93 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="p-6 md:p-8 bg-gray-950 min-h-screen text-gray-100 space-y-8">
+    <div className="p-6 md:p-8 bg-slate-950 min-h-screen text-slate-100 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Gestión de Cuentas y Tarjetas</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Administra tus tarjetas de crédito, cuentas de débito y efectivo. Edita o elimina datos cuando lo necesites.
+        <h1 className="text-2xl font-bold tracking-tight text-white">Gestión de Cuentas y Tarjetas</h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Administra tus tarjetas de crédito, cuentas de débito, rendimientos y apartados de dinero.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Formulario de Alta */}
-        <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg h-fit space-y-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Plus className="w-5 h-5 text-indigo-400" /> Nueva Cuenta / Tarjeta
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg h-fit space-y-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2 text-indigo-400">
+            <Plus className="w-5 h-5" /> Nueva Cuenta / Tarjeta
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Nombre de la Cuenta</label>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Nombre de la Cuenta</label>
               <input
                 type="text"
-                placeholder="Ej. Nu México, Santander Fiesta, Nómina BBVA"
+                placeholder="Ej. Nu Débito, Mercado Pago, BBVA Nómina"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Tipo de Cuenta</label>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Tipo de Cuenta</label>
               <select
                 value={accountType}
                 onChange={(e) => setAccountType(e.target.value as AccountType)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none text-white"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none text-white"
               >
-                <option value="credit_card">Tarjeta de Crédito</option>
                 <option value="debit">Cuenta de Débito / Banco</option>
+                <option value="credit_card">Tarjeta de Crédito</option>
                 <option value="cash">Efectivo / Caja</option>
               </select>
             </div>
 
+            {/* Campos de Débito: Apartados y Rendimiento */}
+            {accountType === 'debit' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Monto en Apartados ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ej. 5000.00"
+                    value={reservedBalance}
+                    onChange={(e) => setReservedBalance(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Rendimiento Anual (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ej. 13.5"
+                    value={yieldRate}
+                    onChange={(e) => setYieldRate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                  />
+                </div>
+              </div>
+            )}
+
             {accountType === 'credit_card' && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Límite de Crédito (MXN)</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Límite de Crédito (MXN)</label>
                   <input
                     type="number"
                     step="0.01"
                     placeholder="25000.00"
                     value={creditLimit}
                     onChange={(e) => setCreditLimit(e.target.value)}
-                    className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Día de Corte</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Día de Corte</label>
                     <input
                       type="number"
                       min="1"
@@ -189,12 +227,12 @@ export default function AccountsPage() {
                       placeholder="Ej. 12"
                       value={cutoffDay}
                       onChange={(e) => setCutoffDay(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Día Límite Pago</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Día Límite Pago</label>
                     <input
                       type="number"
                       min="1"
@@ -202,33 +240,33 @@ export default function AccountsPage() {
                       placeholder="Ej. 2"
                       value={paymentDueDay}
                       onChange={(e) => setPaymentDueDay(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Interés Anual (%)</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Interés Anual (%)</label>
                     <input
                       type="number"
                       step="0.01"
                       placeholder="Ej. 45.0"
                       value={annualInterestRate}
                       onChange={(e) => setAnnualInterestRate(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Pago Mínimo Est.</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Pago Mínimo Est.</label>
                     <input
                       type="number"
                       step="0.01"
                       placeholder="Ej. 800.00"
                       value={minimumPayment}
                       onChange={(e) => setMinimumPayment(e.target.value)}
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
                     />
                   </div>
                 </div>
@@ -236,8 +274,8 @@ export default function AccountsPage() {
             )}
 
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">
-                {accountType === 'credit_card' ? 'Saldo Inicial Deuda (MXN)' : 'Saldo Actual / Disponible (MXN)'}
+              <label className="block text-xs font-medium text-slate-400 mb-1">
+                {accountType === 'credit_card' ? 'Saldo Deuda Actual (MXN)' : 'Saldo Total en la Cuenta (MXN)'}
               </label>
               <input
                 type="number"
@@ -245,7 +283,7 @@ export default function AccountsPage() {
                 placeholder="0.00"
                 value={initialBalance}
                 onChange={(e) => setInitialBalance(e.target.value)}
-                className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-white"
               />
             </div>
 
@@ -261,14 +299,14 @@ export default function AccountsPage() {
 
         {/* Lista de Cuentas */}
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-lg font-semibold">Cuentas Registradas</h2>
+          <h2 className="text-lg font-semibold text-slate-100">Cuentas Registradas</h2>
 
           {fetching ? (
-            <div className="p-8 text-center text-sm text-gray-500 bg-gray-900 rounded-2xl border border-gray-800">
+            <div className="p-8 text-center text-sm text-slate-500 bg-slate-900 rounded-2xl border border-slate-800">
               Cargando cuentas...
             </div>
           ) : accounts.length === 0 ? (
-            <div className="p-8 text-center text-sm text-gray-500 bg-gray-900 rounded-2xl border border-gray-800">
+            <div className="p-8 text-center text-sm text-slate-500 bg-slate-900 rounded-2xl border border-slate-800">
               No tienes cuentas registradas.
             </div>
           ) : (
@@ -276,13 +314,19 @@ export default function AccountsPage() {
               {accounts.map((acc) => {
                 const limit = Number(acc.credit_limit || 0)
                 const current = Number(acc.current_balance || 0)
-                const available = Math.max(0, limit - current)
+                const reserved = Number(acc.reserved_balance || 0)
+                const liquidBalance = Math.max(0, current - reserved)
+                const availableCredit = Math.max(0, limit - current)
                 const usage = limit > 0 ? Math.min(100, (current / limit) * 100) : 0
+
+                // Cálculo de Rendimientos Diarios / Mensuales Estimados
+                const yieldPct = Number(acc.yield_rate || 0)
+                const dailyYield = current > 0 && yieldPct > 0 ? (current * (yieldPct / 100)) / 365 : 0
 
                 return (
                   <div
                     key={acc.id}
-                    className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4 relative shadow-lg hover:border-gray-700 transition-colors"
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 relative shadow-lg hover:border-slate-700 transition-colors"
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
@@ -292,8 +336,8 @@ export default function AccountsPage() {
                           <Wallet className="w-5 h-5 text-emerald-400" />
                         )}
                         <div>
-                          <h3 className="font-semibold text-sm text-gray-100">{acc.name}</h3>
-                          <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                          <h3 className="font-semibold text-sm text-slate-100">{acc.name}</h3>
+                          <span className="text-[10px] text-slate-400 uppercase tracking-wider">
                             {acc.account_type === 'credit_card'
                               ? 'Tarjeta de Crédito'
                               : acc.account_type === 'debit'
@@ -306,14 +350,14 @@ export default function AccountsPage() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => setEditingAccount(acc)}
-                          className="text-gray-500 hover:text-indigo-400 p-1 transition-colors"
+                          className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
                           title="Editar cuenta"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(acc.id)}
-                          className="text-gray-500 hover:text-rose-400 p-1 transition-colors"
+                          className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
                           title="Eliminar cuenta"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -321,27 +365,59 @@ export default function AccountsPage() {
                       </div>
                     </div>
 
-                    {acc.account_type === 'credit_card' && limit > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-gray-400">Línea Utilizada</span>
-                          <span className="font-semibold text-gray-200">{usage.toFixed(1)}%</span>
+                    {/* Visualización de Saldos según tipo */}
+                    {acc.account_type === 'credit_card' ? (
+                      limit > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-400">Línea Utilizada</span>
+                            <span className="font-semibold text-slate-200">{usage.toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                            <div
+                              className={`h-full transition-all duration-300 ${
+                                usage > 85 ? 'bg-rose-500' : usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${usage}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-950 h-2 rounded-full overflow-hidden border border-gray-800">
-                          <div
-                            className={`h-full transition-all duration-300 ${
-                              usage > 85 ? 'bg-rose-500' : usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                            }`}
-                            style={{ width: `${usage}%` }}
-                          />
+                      )
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                        <div>
+                          <p className="text-slate-400 flex items-center gap-1">
+                            <Lock className="w-3 h-3 text-amber-400" /> Apartado / Retenido
+                          </p>
+                          <p className="font-semibold text-amber-300 text-xs mt-0.5">
+                            ${reserved.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">Disponible Líquido</p>
+                          <p className="font-bold text-emerald-400 text-xs mt-0.5">
+                            ${liquidBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                          </p>
                         </div>
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-800/80 text-xs">
+                    {/* Bloque de Rendimiento Estimado */}
+                    {acc.account_type === 'debit' && yieldPct > 0 && (
+                      <div className="bg-emerald-950/40 border border-emerald-800/50 p-2.5 rounded-xl flex items-center justify-between text-[11px] text-emerald-300">
+                        <span className="flex items-center gap-1">
+                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Rendimiento: <strong>{yieldPct}% anual</strong>
+                        </span>
+                        <span>
+                          +${dailyYield.toFixed(2)} MXN/día
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
                       <div>
-                        <p className="text-gray-400">
-                          {acc.account_type === 'credit_card' ? 'Deuda / Gastado' : 'Saldo Disponible'}
+                        <p className="text-slate-400">
+                          {acc.account_type === 'credit_card' ? 'Deuda / Gastado' : 'Saldo Total Cuenta'}
                         </p>
                         <p
                           className={`font-bold text-sm mt-0.5 ${
@@ -354,16 +430,16 @@ export default function AccountsPage() {
 
                       {acc.account_type === 'credit_card' && (
                         <div>
-                          <p className="text-gray-400">Crédito Disponible</p>
+                          <p className="text-slate-400">Crédito Disponible</p>
                           <p className="font-bold text-emerald-400 text-sm mt-0.5">
-                            ${available.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            ${availableCredit.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                           </p>
                         </div>
                       )}
                     </div>
 
                     {acc.account_type === 'credit_card' && (acc.cutoff_day || acc.payment_due_day) && (
-                      <div className="bg-gray-950 p-2.5 rounded-xl border border-gray-800/60 flex items-center justify-between text-[11px] text-gray-300">
+                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 flex items-center justify-between text-[11px] text-slate-300">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-indigo-400" />
                           Corte: <strong>Día {acc.cutoff_day || 'N/A'}</strong>
@@ -384,40 +460,78 @@ export default function AccountsPage() {
       {/* Modal de Edición de Cuenta */}
       {editingAccount && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-800 w-full max-w-md rounded-2xl p-6 space-y-4">
-            <div className="flex justify-between items-center border-b border-gray-800 pb-3">
-              <h3 className="font-bold text-gray-100">Editar Cuenta</h3>
-              <button onClick={() => setEditingAccount(null)} className="text-gray-400 hover:text-white">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-slate-100">Editar Cuenta</h3>
+              <button onClick={() => setEditingAccount(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleUpdate} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Nombre</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Nombre</label>
                 <input
                   type="text"
                   value={editingAccount.name}
                   onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Saldo Actual / Gastado</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  {editingAccount.account_type === 'credit_card' ? 'Saldo Gastado / Deuda' : 'Saldo Total Cuenta'}
+                </label>
                 <input
                   type="number"
                   step="0.01"
                   value={editingAccount.current_balance}
                   onChange={(e) => setEditingAccount({ ...editingAccount, current_balance: Number(e.target.value) })}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                 />
               </div>
+
+              {editingAccount.account_type === 'debit' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Apartados ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingAccount.reserved_balance || ''}
+                      onChange={(e) =>
+                        setEditingAccount({
+                          ...editingAccount,
+                          reserved_balance: e.target.value ? Number(e.target.value) : 0,
+                        })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Rendimiento Anual (%)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingAccount.yield_rate || ''}
+                      onChange={(e) =>
+                        setEditingAccount({
+                          ...editingAccount,
+                          yield_rate: e.target.value ? Number(e.target.value) : 0,
+                        })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
 
               {editingAccount.account_type === 'credit_card' && (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Límite de Crédito</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Límite de Crédito</label>
                     <input
                       type="number"
                       step="0.01"
@@ -428,13 +542,13 @@ export default function AccountsPage() {
                           credit_limit: e.target.value ? Number(e.target.value) : null,
                         })
                       }
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Día de Corte</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Día de Corte</label>
                       <input
                         type="number"
                         min="1"
@@ -446,12 +560,12 @@ export default function AccountsPage() {
                             cutoff_day: e.target.value ? Number(e.target.value) : null,
                           })
                         }
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Día Límite Pago</label>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Día Límite Pago</label>
                       <input
                         type="number"
                         min="1"
@@ -463,41 +577,7 @@ export default function AccountsPage() {
                             payment_due_day: e.target.value ? Number(e.target.value) : null,
                           })
                         }
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Interés Anual (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editingAccount.annual_interest_rate || ''}
-                        onChange={(e) =>
-                          setEditingAccount({
-                            ...editingAccount,
-                            annual_interest_rate: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Pago Mínimo</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editingAccount.minimum_payment || ''}
-                        onChange={(e) =>
-                          setEditingAccount({
-                            ...editingAccount,
-                            minimum_payment: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                       />
                     </div>
                   </div>
@@ -508,7 +588,7 @@ export default function AccountsPage() {
                 <button
                   type="button"
                   onClick={() => setEditingAccount(null)}
-                  className="px-3 py-1.5 text-xs text-gray-400 hover:text-white"
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
                 >
                   Cancelar
                 </button>
