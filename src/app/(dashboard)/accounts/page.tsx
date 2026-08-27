@@ -13,6 +13,7 @@ import {
   getSubAccounts,
   addSubAccount,
   transferToSubAccount,
+  deleteSubAccount,
   SubAccount,
 } from '@/lib/subAccounts'
 import {
@@ -45,7 +46,7 @@ export default function AccountsPage() {
   const [creatingSubAccountFor, setCreatingSubAccountFor] = useState<string | null>(null)
   const [transferringSub, setTransferringSub] = useState<{
     subAcc: SubAccount
-    parentAccId: string
+    parentAcc: Account
   } | null>(null)
 
   // Formulario de nueva cuenta
@@ -78,7 +79,6 @@ export default function AccountsPage() {
       const data = await getAccounts()
       setAccounts(data)
 
-      // Cargar apartados para cada cuenta de débito
       const subMap: Record<string, SubAccount[]> = {}
       for (const acc of data) {
         if (acc.id && acc.account_type === 'debit') {
@@ -114,7 +114,6 @@ export default function AccountsPage() {
         minimum_payment: accountType === 'credit_card' && minimumPayment ? parseFloat(minimumPayment) : null,
       })
 
-      // Limpiar campos
       setName('')
       setCreditLimit('')
       setInitialBalance('')
@@ -191,15 +190,47 @@ export default function AccountsPage() {
     }
   }
 
+  const handleDeleteSubAccount = async (sub: SubAccount) => {
+    if (Number(sub.balance) > 0) {
+      alert(`No puedes eliminar el apartado "${sub.name}" porque aún tiene $${Number(sub.balance).toLocaleString('es-MX')} MXN. Pasa el dinero a disponible primero.`)
+      return
+    }
+
+    if (!confirm(`¿Eliminar el apartado "${sub.name}"?`)) return
+
+    try {
+      await deleteSubAccount(sub.id!, Number(sub.balance))
+      await loadAccounts()
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar el apartado.')
+    }
+  }
+
   const handleTransferSubAccount = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!transferringSub || !transferAmount) return
 
+    const amountNum = parseFloat(transferAmount)
+    const { subAcc, parentAcc } = transferringSub
+    const subAccs = subAccountsMap[parentAcc.id!] || []
+    const reservedFromSubs = subAccs.reduce((sum, s) => sum + Number(s.balance || 0), 0)
+    const liquidBalance = Math.max(0, Number(parentAcc.current_balance || 0) - reservedFromSubs)
+
+    if (transferAction === 'deposit' && amountNum > liquidBalance) {
+      alert(`No tienes suficiente saldo disponible en ${parentAcc.name}. Disponible actual: $${liquidBalance.toLocaleString('es-MX')} MXN.`)
+      return
+    }
+
+    if (transferAction === 'withdraw' && amountNum > Number(subAcc.balance || 0)) {
+      alert(`El monto excede lo guardado en este apartado. Saldo en apartado: $${Number(subAcc.balance).toLocaleString('es-MX')} MXN.`)
+      return
+    }
+
     try {
       await transferToSubAccount({
-        subAccountId: transferringSub.subAcc.id!,
-        parentAccountId: transferringSub.parentAccId,
-        amount: parseFloat(transferAmount),
+        subAccountId: subAcc.id!,
+        parentAccountId: parentAcc.id!,
+        amount: amountNum,
         action: transferAction,
       })
 
@@ -253,7 +284,6 @@ export default function AccountsPage() {
               </select>
             </div>
 
-            {/* Campos de Débito: Apartados y Rendimiento */}
             {accountType === 'debit' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -395,18 +425,15 @@ export default function AccountsPage() {
                 const current = Number(acc.current_balance || 0)
                 const subAccs = subAccountsMap[acc.id!] || []
                 
-                // Suma de apartados y disponible
                 const reservedFromSubs = subAccs.reduce((sum, s) => sum + Number(s.balance || 0), 0)
                 const reserved = Math.max(Number(acc.reserved_balance || 0), reservedFromSubs)
                 const liquidBalance = Math.max(0, current - reserved)
                 const availableCredit = Math.max(0, limit - current)
                 const usage = limit > 0 ? Math.min(100, (current / limit) * 100) : 0
 
-                // Rendimiento diario cuenta principal
                 const mainYieldPct = Number(acc.yield_rate || 0)
                 const mainDailyYield = liquidBalance > 0 && mainYieldPct > 0 ? (liquidBalance * (mainYieldPct / 100)) / 365 : 0
 
-                // Rendimiento diario de apartados
                 const subDailyYieldTotal = subAccs.reduce((sum, s) => {
                   const bal = Number(s.balance || 0)
                   const rate = Number(s.yield_rate || 0)
@@ -467,7 +494,7 @@ export default function AccountsPage() {
                       </div>
                     </div>
 
-                    {/* Visualización de Saldos según tipo */}
+                    {/* Visualización de Saldos */}
                     {acc.account_type === 'credit_card' ? (
                       limit > 0 && (
                         <div className="space-y-1.5">
@@ -504,7 +531,7 @@ export default function AccountsPage() {
                       </div>
                     )}
 
-                    {/* Bloque de Rendimiento Estimado */}
+                    {/* Rendimiento total */}
                     {acc.account_type === 'debit' && totalDailyYield > 0 && (
                       <div className="bg-emerald-950/40 border border-emerald-800/50 p-2.5 rounded-xl flex items-center justify-between text-[11px] text-emerald-300">
                         <span className="flex items-center gap-1">
@@ -540,19 +567,7 @@ export default function AccountsPage() {
                       )}
                     </div>
 
-                    {acc.account_type === 'credit_card' && (acc.cutoff_day || acc.payment_due_day) && (
-                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 flex items-center justify-between text-[11px] text-slate-300">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-indigo-400" />
-                          Corte: <strong>Día {acc.cutoff_day || 'N/A'}</strong>
-                        </span>
-                        <span>
-                          Pago Límite: <strong>Día {acc.payment_due_day || 'N/A'}</strong>
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Desglose de Apartados / Cajitas */}
+                    {/* Desglose de Apartados */}
                     {acc.account_type === 'debit' && subAccs.length > 0 && (
                       <div className="border-t border-slate-800/80 pt-3 space-y-2">
                         <button
@@ -582,16 +597,23 @@ export default function AccountsPage() {
                                     </p>
                                   </div>
 
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2">
                                     <span className="font-bold text-amber-300">
                                       ${subBal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                     </span>
                                     <button
-                                      onClick={() => setTransferringSub({ subAcc: sub, parentAccId: acc.id! })}
+                                      onClick={() => setTransferringSub({ subAcc: sub, parentAcc: acc })}
                                       className="text-indigo-400 hover:text-indigo-300 p-1"
-                                      title="Ingresar / Retirar saldo"
+                                      title="Meter / Sacar saldo"
                                     >
                                       <ArrowRightLeft className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteSubAccount(sub)}
+                                      className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                                      title="Eliminar apartado"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
                                 </div>
@@ -609,7 +631,7 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {/* Modal de Edición de Cuenta */}
+      {/* Modal 1: Editar Cuenta */}
       {editingAccount && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
@@ -643,98 +665,6 @@ export default function AccountsPage() {
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                 />
               </div>
-
-              {editingAccount.account_type === 'debit' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Apartados ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editingAccount.reserved_balance || ''}
-                      onChange={(e) =>
-                        setEditingAccount({
-                          ...editingAccount,
-                          reserved_balance: e.target.value ? Number(e.target.value) : 0,
-                        })
-                      }
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Rendimiento Anual (%)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editingAccount.yield_rate || ''}
-                      onChange={(e) =>
-                        setEditingAccount({
-                          ...editingAccount,
-                          yield_rate: e.target.value ? Number(e.target.value) : 0,
-                        })
-                      }
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {editingAccount.account_type === 'credit_card' && (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Límite de Crédito</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={editingAccount.credit_limit || ''}
-                      onChange={(e) =>
-                        setEditingAccount({
-                          ...editingAccount,
-                          credit_limit: e.target.value ? Number(e.target.value) : null,
-                        })
-                      }
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Día de Corte</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={editingAccount.cutoff_day || ''}
-                        onChange={(e) =>
-                          setEditingAccount({
-                            ...editingAccount,
-                            cutoff_day: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Día Límite Pago</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={editingAccount.payment_due_day || ''}
-                        onChange={(e) =>
-                          setEditingAccount({
-                            ...editingAccount,
-                            payment_due_day: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -812,77 +742,109 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* Modal 3: Ingresar / Retirar Dinero del Apartado */}
-      {transferringSub && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100">
-                Movimiento en "{transferringSub.subAcc.name}"
-              </h3>
-              <button onClick={() => setTransferringSub(null)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
+      {/* Modal 3: Ingresar / Retirar Dinero del Apartado con Saldos Dinámicos */}
+      {transferringSub && (() => {
+        const { subAcc, parentAcc } = transferringSub
+        const subAccs = subAccountsMap[parentAcc.id!] || []
+        const reservedFromSubs = subAccs.reduce((sum, s) => sum + Number(s.balance || 0), 0)
+        const currentLiquidBalance = Math.max(0, Number(parentAcc.current_balance || 0) - reservedFromSubs)
+        const subBalance = Number(subAcc.balance || 0)
+
+        return (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-bold text-slate-100">
+                    Movimiento en "{subAcc.name}"
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Cuenta origen: <span className="text-slate-200 font-semibold">{parentAcc.name}</span>
+                  </p>
+                </div>
+                <button onClick={() => setTransferringSub(null)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleTransferSubAccount} className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTransferAction('deposit')}
+                    className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                      transferAction === 'deposit'
+                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    Meter a Cajita
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTransferAction('withdraw')}
+                    className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
+                      transferAction === 'withdraw'
+                        ? 'bg-rose-600/20 border-rose-500 text-rose-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    Regresar a Disponible
+                  </button>
+                </div>
+
+                {/* Caja de indicador de saldo disponible dinámico */}
+                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-xs">
+                  {transferAction === 'deposit' ? (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Disponible libre en {parentAcc.name}:</span>
+                      <strong className="text-emerald-400 font-bold">
+                        ${currentLiquidBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                      </strong>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Guardado en "{subAcc.name}":</span>
+                      <strong className="text-amber-300 font-bold">
+                        ${subBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN
+                      </strong>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Monto (MXN)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    required
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setTransferringSub(null)}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors"
+                  >
+                    Confirmar Movimiento
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleTransferSubAccount} className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTransferAction('deposit')}
-                  className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                    transferAction === 'deposit'
-                      ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
-                  }`}
-                >
-                  Meter a Cajita
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTransferAction('withdraw')}
-                  className={`py-2 text-xs font-semibold rounded-lg border transition-colors ${
-                    transferAction === 'withdraw'
-                      ? 'bg-rose-600/20 border-rose-500 text-rose-300'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
-                  }`}
-                >
-                  Regresar a Disponible
-                </button>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Monto (MXN)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={transferAmount}
-                  onChange={(e) => setTransferAmount(e.target.value)}
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setTransferringSub(null)}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors"
-                >
-                  Confirmar Movimiento
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
