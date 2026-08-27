@@ -27,6 +27,7 @@ export default function GastosPage() {
   const [category, setCategory] = useState('Alimentos / Súper')
   const [accountId, setAccountId] = useState('')
   const [frequency, setFrequency] = useState<ExpenseFrequency>('unique')
+  const [recurringDay, setRecurringDay] = useState('1')
 
   useEffect(() => {
     loadData()
@@ -251,7 +252,21 @@ export default function GastosPage() {
                               : 'bg-slate-800 text-slate-400 border-slate-700'
                           }`}
                         >
-                          {FREQUENCY_LABELS[freqKey] || 'Única vez'}
+                          {{frequency !== 'unique' && (
+                            <div>
+                              <label className="block text-xs font-medium text-slate-400 mb-1">
+                                Día del Mes para Cargo Automático
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="31"
+                                placeholder="Ej. 15 (Día de corte)"
+                                value={recurringDay}
+                                onChange={(e) => setRecurringDay(e.target.value)}
+                                required
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+                              />}
                         </span>
                       </div>
 
