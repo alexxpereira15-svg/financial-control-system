@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { getDebts, addDebt, updateDebt, deleteDebt, Debt } from '@/lib/debts'
-import { getAccounts, Account } from '@/lib/accounts'
+import { getAccounts, updateAccount, Account } from '@/lib/accounts'
+import { getExpenses } from '@/lib/expenses'
+import { getTransfers } from '@/lib/transfers'
 import {
   CreditCard,
   Plus,
@@ -12,19 +14,32 @@ import {
   Calendar,
   DollarSign,
   X,
+  History,
+  TrendingDown,
   TrendingUp,
+  ArrowRightLeft,
 } from 'lucide-react'
 
 export default function DebtsPage() {
   const [debts, setDebts] = useState<Debt[]>([])
   const [creditAccounts, setCreditAccounts] = useState<Account[]>([])
+  const [expenses, setExpenses] = useState<any[]>([])
+  const [transfers, setTransfers] = useState<any[]>([])
+  
   const [fetching, setFetching] = useState(true)
   const [loading, setLoading] = useState(false)
 
-  // Estado para edición
+  // Modales
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
+  const [editingCard, setEditingCard] = useState<Account | null>(null)
+  const [selectedEntityForHistory, setSelectedEntityForHistory] = useState<{
+    id: string
+    name: string
+    type: 'credit_card' | 'debt'
+    current_balance: number
+  } | null>(null)
 
-  // Formulario
+  // Formulario Alta Préstamos
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
@@ -40,12 +55,19 @@ export default function DebtsPage() {
   const loadAllData = async () => {
     try {
       setFetching(true)
-      const [debtsData, accountsData] = await Promise.all([getDebts(), getAccounts()])
+      const [debtsData, accountsData, expensesData, transfersData] = await Promise.all([
+        getDebts(),
+        getAccounts(),
+        getExpenses(),
+        getTransfers(),
+      ])
+
       setDebts(debtsData)
-      // Filtramos las cuentas que son tarjetas de crédito con saldo pendiente/utilizado
       setCreditAccounts(accountsData.filter((a) => a.account_type === 'credit_card'))
+      setExpenses(expensesData)
+      setTransfers(transfersData)
     } catch (err) {
-      console.error('Error al cargar deudas:', err)
+      console.error('Error al cargar datos:', err)
     } finally {
       setFetching(false)
     }
@@ -70,7 +92,6 @@ export default function DebtsPage() {
         interest_rate: interestRate ? parseFloat(interestRate) : null,
       })
 
-      // Limpiar formulario
       setName('')
       setDescription('')
       setTotalAmount('')
@@ -86,7 +107,7 @@ export default function DebtsPage() {
     }
   }
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const handleUpdateDebt = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingDebt || !editingDebt.id) return
 
@@ -105,6 +126,26 @@ export default function DebtsPage() {
       await loadAllData()
     } catch (err) {
       console.error('Error al actualizar deuda:', err)
+    }
+  }
+
+  const handleUpdateCard = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingCard || !editingCard.id) return
+
+    try {
+      await updateAccount(editingCard.id, {
+        name: editingCard.name,
+        current_balance: Number(editingCard.current_balance),
+        minimum_payment: editingCard.minimum_payment ? Number(editingCard.minimum_payment) : null,
+        payment_due_day: editingCard.payment_due_day ? Number(editingCard.payment_due_day) : null,
+        credit_limit: editingCard.credit_limit ? Number(editingCard.credit_limit) : null,
+      })
+
+      setEditingCard(null)
+      await loadAllData()
+    } catch (err) {
+      console.error('Error al actualizar tarjeta:', err)
     }
   }
 
@@ -127,12 +168,62 @@ export default function DebtsPage() {
   const totalMinPaymentDirect = debts.reduce((acc, debt) => acc + Number(debt.minimum_payment || 0), 0)
   const grandTotalMinPayment = totalMinPaymentCards + totalMinPaymentDirect
 
+  // Filtrado de Historial por Entidad Seleccionada
+  const getEntityHistory = () => {
+    if (!selectedEntityForHistory) return []
+
+    const { id, type } = selectedEntityForHistory
+    let movements: any[] = []
+
+    if (type === 'credit_card') {
+      // 1. Cargos a la tarjeta desde Gastos
+      const cardExpenses = expenses
+        .filter((e) => e.account_id === id)
+        .map((e) => ({
+          id: e.id,
+          type: 'charge',
+          title: e.description,
+          amount: Number(e.amount),
+          date: e.date || e.created_at?.split('T')[0],
+          subtitle: `Categoría: ${e.category}`,
+        }))
+
+      // 2. Abonos a la tarjeta desde Transferencias
+      const cardPayments = transfers
+        .filter((t) => t.to_account_id === id)
+        .map((t) => ({
+          id: t.id,
+          type: 'payment',
+          title: t.description,
+          amount: Number(t.amount),
+          date: t.date,
+          subtitle: `Pago desde ${t.from_account?.name || 'Cuenta'}`,
+        }))
+
+      movements = [...cardExpenses, ...cardPayments]
+    } else {
+      // Abonos a Préstamo Directo desde Transferencias
+      movements = transfers
+        .filter((t) => t.to_debt_id === id)
+        .map((t) => ({
+          id: t.id,
+          type: 'payment',
+          title: t.description,
+          amount: Number(t.amount),
+          date: t.date,
+          subtitle: `Abono desde ${t.from_account?.name || 'Cuenta'}`,
+        }))
+    }
+
+    return movements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }
+
   return (
     <div className="p-6 md:p-8 bg-slate-950 min-h-screen text-slate-100 space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-white">Consolidado de Deudas</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Visualiza el pasivo acumulado de tus tarjetas de crédito y registra préstamos personales o financiamientos fijos.
+          Visualiza y edita los pasivos de tus tarjetas de crédito y préstamos con historial de movimientos en tiempo real.
         </p>
       </div>
 
@@ -163,10 +254,10 @@ export default function DebtsPage() {
         </div>
       </div>
 
-      {/* Sección 1: Deudas automáticas provenientes de Tarjetas de Crédito */}
+      {/* Sección 1: Tarjetas de Crédito */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold flex items-center gap-2 text-indigo-300">
-          <CreditCard className="w-5 h-5" /> Deudas por Tarjetas de Crédito (Desde Cuentas)
+          <CreditCard className="w-5 h-5" /> Deudas por Tarjetas de Crédito
         </h2>
 
         {fetching ? (
@@ -184,15 +275,35 @@ export default function DebtsPage() {
               const minPay = Number(acc.minimum_payment || 0)
 
               return (
-                <div key={acc.id} className="bg-slate-900 border border-slate-800/80 p-4 rounded-2xl space-y-3">
+                <div key={acc.id} className="bg-slate-900 border border-slate-800/80 p-5 rounded-2xl space-y-4 shadow-md hover:border-slate-700 transition-colors">
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="font-semibold text-sm text-slate-100">{acc.name}</h3>
                       <p className="text-[10px] text-slate-400 uppercase">Tarjeta de Crédito</p>
                     </div>
-                    <span className="text-xs bg-purple-950/80 text-purple-300 border border-purple-800 px-2 py-0.5 rounded-full font-medium">
-                      Automático
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingCard(acc)}
+                        className="text-slate-500 hover:text-indigo-400 p-1 transition-colors"
+                        title="Editar Tarjeta"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() =>
+                          setSelectedEntityForHistory({
+                            id: acc.id!,
+                            name: acc.name,
+                            type: 'credit_card',
+                            current_balance: current,
+                          })
+                        }
+                        className="text-slate-500 hover:text-emerald-400 p-1 transition-colors"
+                        title="Ver Historial"
+                      >
+                        <History className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1">
@@ -355,7 +466,7 @@ export default function DebtsPage() {
                 return (
                   <div
                     key={debt.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-md relative hover:border-slate-700 transition-colors"
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-md hover:border-slate-700 transition-colors"
                   >
                     <div className="flex justify-between items-start">
                       <div>
@@ -364,6 +475,20 @@ export default function DebtsPage() {
                       </div>
 
                       <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            setSelectedEntityForHistory({
+                              id: debt.id!,
+                              name: debt.name,
+                              type: 'debt',
+                              current_balance: current,
+                            })
+                          }
+                          className="text-slate-500 hover:text-emerald-400 p-1 transition-colors"
+                          title="Ver Historial de Abonos"
+                        >
+                          <History className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setEditingDebt(debt)}
                           className="text-slate-500 hover:text-purple-400 p-1 transition-colors"
@@ -381,7 +506,6 @@ export default function DebtsPage() {
                       </div>
                     </div>
 
-                    {/* Barra de Progreso de Pago */}
                     <div className="space-y-1">
                       <div className="flex justify-between text-[11px] text-slate-400">
                         <span>Avance de Pagos</span>
@@ -409,23 +533,6 @@ export default function DebtsPage() {
                         </p>
                       </div>
                     </div>
-
-                    {(debt.due_day || debt.minimum_payment) && (
-                      <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 flex items-center justify-between text-[11px] text-slate-300">
-                        {debt.due_day ? (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-purple-400" /> Paga el día: <strong>{debt.due_day}</strong>
-                          </span>
-                        ) : (
-                          <span />
-                        )}
-                        {debt.minimum_payment && (
-                          <span>
-                            Pago Fijo: <strong>${Number(debt.minimum_payment).toLocaleString('es-MX')}</strong>
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -434,18 +541,18 @@ export default function DebtsPage() {
         </div>
       </div>
 
-      {/* Modal de Edición de Deuda Directa */}
+      {/* Modal 1: Editar Deuda Directa */}
       {editingDebt && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100">Editar Deuda Directa</h3>
+              <h3 className="font-bold text-slate-100">Editar Préstamo / Deuda</h3>
               <button onClick={() => setEditingDebt(null)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdate} className="space-y-3">
+            <form onSubmit={handleUpdateDebt} className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">Nombre</label>
                 <input
@@ -490,41 +597,6 @@ export default function DebtsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Pago Fijo Mensual</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editingDebt.minimum_payment || ''}
-                    onChange={(e) =>
-                      setEditingDebt({
-                        ...editingDebt,
-                        minimum_payment: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Día de Pago</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={editingDebt.due_day || ''}
-                    onChange={(e) =>
-                      setEditingDebt({
-                        ...editingDebt,
-                        due_day: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -541,6 +613,153 @@ export default function DebtsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Editar Tarjeta de Crédito */}
+      {editingCard && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-slate-100">Editar Tarjeta de Crédito</h3>
+              <button onClick={() => setEditingCard(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCard} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Nombre de la Tarjeta</label>
+                <input
+                  type="text"
+                  value={editingCard.name}
+                  onChange={(e) => setEditingCard({ ...editingCard, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Deuda / Saldo Usado</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingCard.current_balance}
+                    onChange={(e) => setEditingCard({ ...editingCard, current_balance: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Límite de Crédito</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingCard.credit_limit || ''}
+                    onChange={(e) => setEditingCard({ ...editingCard, credit_limit: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Pago Mínimo Est.</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingCard.minimum_payment || ''}
+                    onChange={(e) => setEditingCard({ ...editingCard, minimum_payment: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Día Límite de Pago</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={editingCard.payment_due_day || ''}
+                    onChange={(e) => setEditingCard({ ...editingCard, payment_due_day: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingCard(null)}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Estado de Cuenta e Historial de Movimientos */}
+      {selectedEntityForHistory && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                  <History className="w-5 h-5 text-indigo-400" /> Historial de {selectedEntityForHistory.name}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Saldo pendiente actual: ${selectedEntityForHistory.current_balance.toLocaleString('es-MX')} MXN
+                </p>
+              </div>
+              <button onClick={() => setSelectedEntityForHistory(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-96 overflow-y-auto space-y-3 pr-1">
+              {getEntityHistory().length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  No hay gastos ni abonos registrados para esta cuenta aún.
+                </div>
+              ) : (
+                getEntityHistory().map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-slate-950 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        {item.type === 'charge' ? (
+                          <TrendingDown className="w-4 h-4 text-rose-400" />
+                        ) : (
+                          <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        )}
+                        <p className="font-medium text-xs text-slate-200">{item.title}</p>
+                      </div>
+                      <p className="text-[11px] text-slate-400">{item.subtitle} • {item.date}</p>
+                    </div>
+
+                    <div
+                      className={`font-bold text-xs ${
+                        item.type === 'charge' ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {item.type === 'charge' ? '+' : '-'}${item.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
