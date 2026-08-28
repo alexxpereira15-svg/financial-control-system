@@ -29,6 +29,7 @@ import {
   ArrowRightLeft,
   ChevronDown,
   ChevronUp,
+  Percent,
 } from 'lucide-react'
 
 export default function AccountsPage() {
@@ -422,19 +423,16 @@ export default function AccountsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {accounts.map((acc) => {
                 const limit = Number(acc.credit_limit || 0)
-                const currentTotal = Number(acc.current_balance || 0) // Saldo Total contando apartados
+                const currentTotal = Number(acc.current_balance || 0)
                 const subAccs = subAccountsMap[acc.id!] || []
                 
-                // Suma de apartados
                 const reservedFromSubs = subAccs.reduce((sum, s) => sum + Number(s.balance || 0), 0)
                 const reserved = subAccs.length > 0 ? reservedFromSubs : Number(acc.reserved_balance || 0)
                 
-                // Saldo Líquido = Saldo Total - Apartados
                 const liquidBalance = Math.max(0, currentTotal - reserved)
                 const availableCredit = Math.max(0, limit - currentTotal)
                 const usage = limit > 0 ? Math.min(100, (currentTotal / limit) * 100) : 0
 
-                // Rendimiento diario
                 const mainYieldPct = Number(acc.yield_rate || 0)
                 const mainDailyYield = liquidBalance > 0 && mainYieldPct > 0 ? (liquidBalance * (mainYieldPct / 100)) / 365 : 0
 
@@ -450,10 +448,7 @@ export default function AccountsPage() {
                 return (
                   <div
                     key={acc.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 relative shadow-lg hover:border-slate-700 transition-colors cursor-pointer"
-                    onClick={() => {
-                      if (acc.account_type === 'debit') setExpandedAccount(isExpanded ? null : acc.id!)
-                    }}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 relative shadow-lg hover:border-slate-700 transition-colors"
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
@@ -474,7 +469,7 @@ export default function AccountsPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
                         {acc.account_type === 'debit' && (
                           <button
                             onClick={() => setCreatingSubAccountFor(acc)}
@@ -501,136 +496,173 @@ export default function AccountsPage() {
                       </div>
                     </div>
 
-                    {/* Visualización de Saldos */}
+                    {/* Bloque 1: Vista para Tarjetas de Crédito */}
                     {acc.account_type === 'credit_card' ? (
-                      limit > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-slate-400">Línea Utilizada</span>
-                            <span className="font-semibold text-slate-200">{usage.toFixed(1)}%</span>
+                      <div className="space-y-3">
+                        {limit > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-slate-400">Línea Utilizada</span>
+                              <span className="font-semibold text-slate-200">{usage.toFixed(1)}%</span>
+                            </div>
+                            <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                              <div
+                                className={`h-full transition-all duration-300 ${
+                                  usage > 85 ? 'bg-rose-500' : usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${usage}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                            <div
-                              className={`h-full transition-all duration-300 ${
-                                usage > 85 ? 'bg-rose-500' : usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                              }`}
-                              style={{ width: `${usage}%` }}
-                            />
+                        )}
+
+                        <div className="grid grid-cols-3 gap-2 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 text-center">
+                          <div>
+                            <p className="text-slate-400 text-[10px]">Límite Crédito</p>
+                            <p className="font-semibold text-slate-200 mt-0.5">
+                              ${limit.toLocaleString('es-MX')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 text-[10px]">Deuda Actual</p>
+                            <p className="font-bold text-rose-400 mt-0.5">
+                              ${currentTotal.toLocaleString('es-MX')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 text-[10px]">Disponible</p>
+                            <p className="font-bold text-emerald-400 mt-0.5">
+                              ${availableCredit.toLocaleString('es-MX')}
+                            </p>
                           </div>
                         </div>
-                      )
+
+                        <div className="grid grid-cols-2 gap-2 text-xs bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60">
+                          <div>
+                            <p className="text-slate-400 text-[10px]">Pago Mínimo Est.</p>
+                            <p className="font-semibold text-amber-300 mt-0.5">
+                              ${Number(acc.minimum_payment || 0).toLocaleString('es-MX')}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 text-[10px]">Interés Anual</p>
+                            <p className="font-semibold text-slate-300 mt-0.5">
+                              {acc.annual_interest_rate ? `${acc.annual_interest_rate}%` : 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {(acc.cutoff_day || acc.payment_due_day) && (
+                          <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/60 flex items-center justify-between text-[11px] text-slate-300">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-indigo-400" />
+                              Corte: <strong>Día {acc.cutoff_day || 'N/A'}</strong>
+                            </span>
+                            <span>
+                              Pago Límite: <strong>Día {acc.payment_due_day || 'N/A'}</strong>
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-                        <div>
-                          <p className="text-slate-400 flex items-center gap-1">
-                            <Lock className="w-3 h-3 text-amber-400" /> Apartado / Retenido
-                          </p>
-                          <p className="font-semibold text-amber-300 text-xs mt-0.5">
-                            ${reserved.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                          </p>
+                      /* Bloque 2: Vista para Cuentas de Débito / Efectivo */
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                          <div>
+                            <p className="text-slate-400 flex items-center gap-1">
+                              <Lock className="w-3 h-3 text-amber-400" /> Apartado / Retenido
+                            </p>
+                            <p className="font-semibold text-amber-300 text-xs mt-0.5">
+                              ${reserved.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400 font-medium">Disponible Líquido</p>
+                            <p className="font-bold text-emerald-400 text-xs mt-0.5">
+                              ${liquidBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-slate-400 font-medium">Disponible Líquido</p>
-                          <p className="font-bold text-emerald-400 text-xs mt-0.5">
-                            ${liquidBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                          </p>
+
+                        {totalDailyYield > 0 && (
+                          <div className="bg-emerald-950/40 border border-emerald-800/50 p-2.5 rounded-xl flex items-center justify-between text-[11px] text-emerald-300">
+                            <span className="flex items-center gap-1">
+                              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Rendimiento diario est.
+                            </span>
+                            <span>
+                              +${totalDailyYield.toFixed(2)} MXN/día
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                          <div>
+                            <p className="text-slate-400">Saldo Total Cuenta</p>
+                            <p className="font-bold text-emerald-400 text-sm mt-0.5">
+                              ${currentTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-slate-400">Tasa Anual Base</p>
+                            <p className="font-semibold text-slate-300 text-sm mt-0.5">
+                              {mainYieldPct > 0 ? `${mainYieldPct}%` : '0%'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    )}
 
-                    {/* Rendimiento total */}
-                    {acc.account_type === 'debit' && totalDailyYield > 0 && (
-                      <div className="bg-emerald-950/40 border border-emerald-800/50 p-2.5 rounded-xl flex items-center justify-between text-[11px] text-emerald-300">
-                        <span className="flex items-center gap-1">
-                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Rendimiento diario est.
-                        </span>
-                        <span>
-                          +${totalDailyYield.toFixed(2)} MXN/día
-                        </span>
-                      </div>
-                    )}
+                        {/* Desglose de Apartados */}
+                        {subAccs.length > 0 && (
+                          <div className="border-t border-slate-800/80 pt-3 space-y-2">
+                            <button
+                              onClick={() => setExpandedAccount(isExpanded ? null : acc.id!)}
+                              className="flex justify-between items-center w-full text-xs text-slate-400 hover:text-white"
+                            >
+                              <span>{subAccs.length} Apartados con rendimiento</span>
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
-                      <div>
-                        <p className="text-slate-400">
-                          {acc.account_type === 'credit_card' ? 'Deuda / Gastado' : 'Saldo Total Cuenta'}
-                        </p>
-                        <p
-                          className={`font-bold text-sm mt-0.5 ${
-                            acc.account_type === 'credit_card' ? 'text-rose-400' : 'text-emerald-400'
-                          }`}
-                        >
-                          ${currentTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        </p>
-                      </div>
+                            {isExpanded && (
+                              <div className="space-y-2 pt-1">
+                                {subAccs.map((sub) => {
+                                  const subBal = Number(sub.balance || 0)
+                                  const subRate = Number(sub.yield_rate || 0)
+                                  const subYield = subBal > 0 && subRate > 0 ? (subBal * (subRate / 100)) / 365 : 0
 
-                      {acc.account_type === 'credit_card' && (
-                        <div>
-                          <p className="text-slate-400">Crédito Disponible</p>
-                          <p className="font-bold text-emerald-400 text-sm mt-0.5">
-                            ${availableCredit.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                                  return (
+                                    <div
+                                      key={sub.id}
+                                      className="bg-slate-950 p-3 rounded-xl border border-slate-800/60 flex items-center justify-between text-xs"
+                                    >
+                                      <div>
+                                        <p className="font-semibold text-slate-200">{sub.name}</p>
+                                        <p className="text-[10px] text-slate-400 mt-0.5">
+                                          Tasa: {subRate}% anual • +${subYield.toFixed(2)} MXN/día
+                                        </p>
+                                      </div>
 
-                    {/* Desglose de Apartados (Accionable haciendo clic en cualquier parte de la tarjeta) */}
-                    {acc.account_type === 'debit' && (
-                      <div className="border-t border-slate-800/80 pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setExpandedAccount(isExpanded ? null : acc.id!)}
-                          className="flex justify-between items-center w-full text-xs text-slate-400 hover:text-white"
-                        >
-                          <span>{subAccs.length} Apartados con rendimiento</span>
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-
-                        {isExpanded && (
-                          <div className="space-y-2 pt-1">
-                            {subAccs.length === 0 ? (
-                              <p className="text-[11px] text-slate-500 text-center py-2">
-                                No hay apartados en esta cuenta. Haz clic en '+' arriba para crear uno.
-                              </p>
-                            ) : (
-                              subAccs.map((sub) => {
-                                const subBal = Number(sub.balance || 0)
-                                const subRate = Number(sub.yield_rate || 0)
-                                const subYield = subBal > 0 && subRate > 0 ? (subBal * (subRate / 100)) / 365 : 0
-
-                                return (
-                                  <div
-                                    key={sub.id}
-                                    className="bg-slate-950 p-3 rounded-xl border border-slate-800/60 flex items-center justify-between text-xs"
-                                  >
-                                    <div>
-                                      <p className="font-semibold text-slate-200">{sub.name}</p>
-                                      <p className="text-[10px] text-slate-400 mt-0.5">
-                                        Tasa: {subRate}% anual • +${subYield.toFixed(2)} MXN/día
-                                      </p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-amber-300">
+                                          ${subBal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <button
+                                          onClick={() => setTransferringSub({ subAcc: sub, parentAcc: acc })}
+                                          className="text-indigo-400 hover:text-indigo-300 p-1"
+                                          title="Meter / Sacar saldo"
+                                        >
+                                          <ArrowRightLeft className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteSubAccount(sub)}
+                                          className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                                          title="Eliminar apartado"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
                                     </div>
-
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-bold text-amber-300">
-                                        ${subBal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                                      </span>
-                                      <button
-                                        onClick={() => setTransferringSub({ subAcc: sub, parentAcc: acc })}
-                                        className="text-indigo-400 hover:text-indigo-300 p-1"
-                                        title="Meter / Sacar saldo"
-                                      >
-                                        <ArrowRightLeft className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteSubAccount(sub)}
-                                        className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
-                                        title="Eliminar apartado"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                )
-                              })
+                                  )
+                                })}
+                              </div>
                             )}
                           </div>
                         )}
@@ -679,6 +711,96 @@ export default function AccountsPage() {
                 />
               </div>
 
+              {editingAccount.account_type === 'credit_card' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Límite de Crédito</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingAccount.credit_limit || ''}
+                      onChange={(e) =>
+                        setEditingAccount({
+                          ...editingAccount,
+                          credit_limit: e.target.value ? Number(e.target.value) : null,
+                        })
+                      }
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Día de Corte</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={editingAccount.cutoff_day || ''}
+                        onChange={(e) =>
+                          setEditingAccount({
+                            ...editingAccount,
+                            cutoff_day: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Día Límite Pago</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={editingAccount.payment_due_day || ''}
+                        onChange={(e) =>
+                          setEditingAccount({
+                            ...editingAccount,
+                            payment_due_day: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Interés Anual (%)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editingAccount.annual_interest_rate || ''}
+                        onChange={(e) =>
+                          setEditingAccount({
+                            ...editingAccount,
+                            annual_interest_rate: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">Pago Mínimo</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editingAccount.minimum_payment || ''}
+                        onChange={(e) =>
+                          setEditingAccount({
+                            ...editingAccount,
+                            minimum_payment: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -699,7 +821,7 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* Modal 2: Crear Nuevo Apartado (Pregunta nombre, rendimiento y monto a apartar) */}
+      {/* Modal 2: Crear Nuevo Apartado */}
       {creatingSubAccountFor && (() => {
         const parentAcc = creatingSubAccountFor
         const subAccs = subAccountsMap[parentAcc.id!] || []
@@ -784,7 +906,7 @@ export default function AccountsPage() {
         )
       })()}
 
-      {/* Modal 3: Meter / Sacar Dinero del Apartado con Saldos Validados */}
+      {/* Modal 3: Meter / Sacar Dinero del Apartado */}
       {transferringSub && (() => {
         const { subAcc, parentAcc } = transferringSub
         const subAccs = subAccountsMap[parentAcc.id!] || []
@@ -835,7 +957,6 @@ export default function AccountsPage() {
                   </button>
                 </div>
 
-                {/* Caja contenedora del saldo disponible o apartado según la pestaña seleccionada */}
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-xs">
                   {transferAction === 'deposit' ? (
                     <div className="flex justify-between items-center">
