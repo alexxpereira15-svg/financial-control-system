@@ -24,6 +24,7 @@ export async function getSubAccounts(accountId: string): Promise<SubAccount[]> {
 }
 
 export async function addSubAccount(subAccount: Omit<SubAccount, 'id' | 'created_at'>) {
+  // 1. Crear la cajita / apartado
   const { data, error } = await supabase
     .from('sub_accounts')
     .insert([subAccount])
@@ -32,7 +33,7 @@ export async function addSubAccount(subAccount: Omit<SubAccount, 'id' | 'created
 
   if (error) throw error
 
-  // Si se crea el apartado con un saldo inicial, se suma al saldo retenido de la cuenta padre
+  // 2. Si se aparta dinero desde la creación, se suma al saldo retenido de la cuenta padre
   if (subAccount.balance && subAccount.balance > 0) {
     const parent = await getAccountById(subAccount.account_id)
     if (parent) {
@@ -59,7 +60,6 @@ export async function deleteSubAccount(subAccountId: string, currentBalance: num
   if (error) throw error
 }
 
-// Transferir fondos entre la cuenta principal y un apartado
 export async function transferToSubAccount(params: {
   subAccountId: string
   parentAccountId: string
@@ -86,15 +86,16 @@ export async function transferToSubAccount(params: {
   let newReserved = currentReserved
 
   if (action === 'deposit') {
+    // Suma al apartado y aumenta el retenido (lo que disminuye el líquido disponible)
     newSubBal += amount
     newReserved += amount
   } else {
-    // Al retirar, reducimos el saldo en la cajita y liberamos la reserva de la cuenta principal
+    // Resta del apartado y disminuye el retenido (lo que regresa el dinero directo al disponible)
     newSubBal = Math.max(0, currentSubBal - amount)
     newReserved = Math.max(0, currentReserved - amount)
   }
 
-  // 1. Actualizar el saldo dentro de la cajita/apartado
+  // Actualizar apartado
   const { error: subErr } = await supabase
     .from('sub_accounts')
     .update({ balance: newSubBal })
@@ -102,8 +103,8 @@ export async function transferToSubAccount(params: {
 
   if (subErr) throw subErr
 
-  // 2. Actualizar el saldo retenido en la cuenta principal
-  await updateAccount(parentAccountId, { 
-    reserved_balance: newReserved 
+  // Actualizar retenido en cuenta padre
+  await updateAccount(parentAccountId, {
+    reserved_balance: newReserved,
   })
 }
